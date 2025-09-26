@@ -15,6 +15,7 @@ interface FluxCreateRequestBody {
 interface FluxCreateResponse {
   id: string;
   polling_url: string;
+  image_url?: string;
 }
 
 interface FluxPollResponse {
