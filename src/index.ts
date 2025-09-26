@@ -32,14 +32,35 @@ import {
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-// Add CORS middleware BEFORE other middleware
+// Add CORS middleware BEFORE other middleware - Allow all origins
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'], // Allow both common Next.js ports
+  origin: true, // Allow all origins
   credentials: true,
   optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  preflightContinue: false,
+  maxAge: 86400 // 24 hours
 }));
+
+// Handle preflight requests for all routes
+app.options('*', (req: Request, res: Response): void => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+
+// Set CORS headers on all responses
+app.use((req: Request, res: Response, next: NextFunction): void => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 // Your existing middleware
 app.use(express.json());
