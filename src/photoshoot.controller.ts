@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import GeminiConnector from './gemini.connector';
+import { convertGeminiImagesToStorage, ImageStorageResult } from './image-storage.helper';
 
 interface GenerateModelsBody {
   gender: string;
@@ -12,6 +13,8 @@ interface GenerateModelsBody {
   clothingStyle: string;
   count?: number; // default 4
   aspect_ratio?: string;
+  userId?: string;
+  storeInGridFS?: boolean;
 }
 
 interface GeneratePoseBody {
@@ -19,6 +22,8 @@ interface GeneratePoseBody {
   count: number;
   geminiImage?: { mimeType: string; data: string }; // base64 for gemini
   aspect_ratio?: string;
+  userId?: string;
+  storeInGridFS?: boolean;
 }
 
 interface GenerateBackgroundBody {
@@ -29,6 +34,8 @@ interface GenerateBackgroundBody {
   mood: string;
   aspect_ratio?: string;
   count?: number; // default 1
+  userId?: string;
+  storeInGridFS?: boolean;
 }
 
 interface ImageGroupItem {
@@ -38,6 +45,8 @@ interface ImageGroupItem {
 
 interface MultiImageBody {
   groups: ImageGroupItem[]; // [{ images: [], prompt }, ...]
+  userId?: string;
+  storeInGridFS?: boolean;
 }
 
 // New interfaces for avatar generation
@@ -57,12 +66,14 @@ interface AvatarGenerateBody {
   background?: string;
   aspect_ratio?: string;
   negative_prompt?: string;
+  userId?: string;
+  storeInGridFS?: boolean;
 }
 
 interface TryOnItem {
-  avatar_image: { mimeType: string; data: string }; // base64 for avatar
-  garment_images: Array<{ mimeType: string; data: string }>; // base64 for garments
-  reference_model_images?: Array<{ mimeType: string; data: string }>; // optional reference images
+  avatar_image: string | { mimeType: string; data: string }; // URL string or base64 object
+  garment_images: Array<string | { mimeType: string; data: string }>; // URL strings or base64 objects
+  reference_model_images?: Array<string | { mimeType: string; data: string }>; // optional reference images
 }
 
 interface TryOnRequestBody {
@@ -70,6 +81,8 @@ interface TryOnRequestBody {
   aspect_ratio?: string;
   style?: string;
   negative_prompt?: string;
+  storeInGridFS?: boolean;
+  userId?: string;
 }
 
 interface PoseRequestBody {
@@ -171,6 +184,41 @@ function parseGeminiParts(candidate: any) {
   return { text, images };
 }
 
+// Helper function to fetch image from URL and convert to base64
+async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string }> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString('base64');
+    
+    // Determine MIME type from response headers or URL
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    return {
+      mimeType: contentType,
+      data: base64
+    };
+  } catch (error) {
+    console.error('Error fetching image from URL:', url, error);
+    throw new Error(`Failed to fetch image from URL: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+// Helper function to convert image input to base64 format
+async function convertImageInputToBase64(input: string | { mimeType: string; data: string }): Promise<{ mimeType: string; data: string }> {
+  if (typeof input === 'string') {
+    // It's a URL, fetch it
+    return await fetchImageAsBase64(input);
+  } else {
+    // It's already in base64 format
+    return input;
+  }
+}
+
 export const generateModels = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as GenerateModelsBody;
@@ -195,13 +243,44 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
         });
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
-        const result = {
+        
+        let result: any = {
           id: `model-${i}`,
           status: 'completed' as const,
           images: parsed.images,
           text: parsed.text,
           createdAt: new Date(),
         };
+
+        // Store images in GridFS if requested
+        if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+          try {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+              filenamePrefix: `model-${i}`,
+              userId: body.userId,
+              metadata: {
+                type: 'model-generation',
+                gender: body.gender,
+                ethnicity: body.ethnicity,
+                age: body.age,
+                skinTone: body.skinTone,
+                eyeColor: body.eyeColor,
+                hairStyle: body.hairStyle,
+                hairColor: body.hairColor,
+                clothingStyle: body.clothingStyle,
+                aspect_ratio: body.aspect_ratio,
+                generatedAt: new Date().toISOString()
+              },
+              expiry: '24h'
+            });
+            
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          } catch (error) {
+            console.error('Error storing model images in GridFS:', error);
+            // Keep original images if storage fails
+          }
+        }
 
         // Stream individual result
         res.write(JSON.stringify(result) + '\n');
@@ -270,13 +349,37 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
         });
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
-        const result = {
+        
+        let result: any = {
           id: `pose-${i}`,
           status: 'completed' as const,
           images: parsed.images,
           text: parsed.text,
           createdAt: new Date(),
         };
+
+        // Store images in GridFS if requested
+        if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+          try {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+              filenamePrefix: `pose-${i}`,
+              userId: body.userId,
+              metadata: {
+                type: 'pose-generation',
+                prompt: body.prompt,
+                aspect_ratio: body.aspect_ratio,
+                generatedAt: new Date().toISOString()
+              },
+              expiry: '24h'
+            });
+            
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          } catch (error) {
+            console.error('Error storing pose images in GridFS:', error);
+            // Keep original images if storage fails
+          }
+        }
 
         res.write(JSON.stringify(result) + '\n');
       } catch (error) {
@@ -338,13 +441,41 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
         });
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
-        const result = {
+        
+        let result: any = {
           id: `background-${i}`,
           status: 'completed' as const,
           images: parsed.images,
           text: parsed.text,
           createdAt: new Date(),
         };
+
+        // Store images in GridFS if requested
+        if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+          try {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+              filenamePrefix: `background-${i}`,
+              userId: body.userId,
+              metadata: {
+                type: 'background-generation',
+                locationType: body.locationType,
+                locationDetail: body.locationDetail,
+                cameraAngle: body.cameraAngle,
+                lightingStyle: body.lightingStyle,
+                mood: body.mood,
+                aspect_ratio: body.aspect_ratio,
+                generatedAt: new Date().toISOString()
+              },
+              expiry: '24h'
+            });
+            
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          } catch (error) {
+            console.error('Error storing background images in GridFS:', error);
+            // Keep original images if storage fails
+          }
+        }
 
         res.write(JSON.stringify(result) + '\n');
       } catch (error) {
@@ -630,12 +761,38 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const firstResult = {
+    let firstResult: any = {
       angle: plan.angles[0].name,
       prompt: firstPrompt,
       images: firstParsed.images,
       text: firstParsed.text,
     };
+
+    // Store first image in GridFS if requested
+    if (body.storeInGridFS && firstParsed.images && firstParsed.images.length > 0) {
+      try {
+        const storedImages = await convertGeminiImagesToStorage(firstParsed.images, {
+          filenamePrefix: `avatar-${plan.angles[0].name}`,
+          userId: body.userId,
+          metadata: {
+            type: 'avatar-generation',
+            angle: plan.angles[0].name,
+            subject: body.subject,
+            style: body.style,
+            background: body.background,
+            aspect_ratio: body.aspect_ratio,
+            generatedAt: new Date().toISOString()
+          },
+          expiry: '24h'
+        });
+        
+        firstResult.images = storedImages;
+        firstResult.storedInGridFS = true;
+      } catch (error) {
+        console.error('Error storing first avatar image in GridFS:', error);
+        // Keep original images if storage fails
+      }
+    }
 
     // Stream the first result
     res.write(JSON.stringify(firstResult) + '\n');
@@ -661,12 +818,39 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
         });
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
-        const result = {
+        
+        let result: any = {
           angle: angle.name,
           prompt: angle.prompt,
           images: parsed.images,
           text: parsed.text,
         };
+
+        // Store remaining images in GridFS if requested
+        if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+          try {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+              filenamePrefix: `avatar-${angle.name}`,
+              userId: body.userId,
+              metadata: {
+                type: 'avatar-generation',
+                angle: angle.name,
+                subject: body.subject,
+                style: body.style,
+                background: body.background,
+                aspect_ratio: body.aspect_ratio,
+                generatedAt: new Date().toISOString()
+              },
+              expiry: '24h'
+            });
+            
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          } catch (error) {
+            console.error('Error storing avatar image in GridFS:', error);
+            // Keep original images if storage fails
+          }
+        }
 
         // Stream each result as it's generated
         res.write(JSON.stringify(result) + '\n');
@@ -721,22 +905,47 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
 
     for (let idx = 0; idx < body.items.length; idx++) {
       const item = body.items[idx];
-      const initialAvatar = item.avatar_image;
-      const garments = Array.isArray(item.garment_images) ? item.garment_images : [];
+      const initialAvatarInput = item.avatar_image;
+      const garmentInputs = Array.isArray(item.garment_images) ? item.garment_images : [];
       
-      if (!initialAvatar || garments.length === 0) {
+      if (!initialAvatarInput || garmentInputs.length === 0) {
         const err = {
           item_index: idx,
-          error: !initialAvatar ? 'Missing avatar_image' : 'No garment_images provided'
+          error: !initialAvatarInput ? 'Missing avatar_image' : 'No garment_images provided'
         };
         res.write(JSON.stringify(err) + '\n');
         continue;
       }
 
-      let currentAvatar = initialAvatar;
+      // Convert avatar image to base64 format
+      let currentAvatar: { mimeType: string; data: string };
+      try {
+        currentAvatar = await convertImageInputToBase64(initialAvatarInput);
+      } catch (error) {
+        const err = {
+          item_index: idx,
+          error: `Failed to process avatar image: ${error instanceof Error ? error.message : 'Unknown error'}`
+        };
+        res.write(JSON.stringify(err) + '\n');
+        continue;
+      }
 
-      for (let g = 0; g < garments.length; g++) {
-        const garment = garments[g];
+      for (let g = 0; g < garmentInputs.length; g++) {
+        const garmentInput = garmentInputs[g];
+        
+        // Convert garment image to base64 format
+        let garment: { mimeType: string; data: string };
+        try {
+          garment = await convertImageInputToBase64(garmentInput);
+        } catch (error) {
+          const err = {
+            item_index: idx,
+            step: g + 1,
+            error: `Failed to process garment image: ${error instanceof Error ? error.message : 'Unknown error'}`
+          };
+          res.write(JSON.stringify(err) + '\n');
+          continue;
+        }
         
         const isFirstGarment = (g === 0);
         let prompt = '';
@@ -776,8 +985,14 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
 
         // Add reference model images if provided
         if (item.reference_model_images) {
-          for (const refImg of item.reference_model_images) {
-            input_parts.push({ inlineData: refImg });
+          for (const refImgInput of item.reference_model_images) {
+            try {
+              const refImg = await convertImageInputToBase64(refImgInput);
+              input_parts.push({ inlineData: refImg });
+            } catch (error) {
+              console.warn(`Failed to process reference model image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+              // Continue without this reference image
+            }
           }
         }
 
@@ -792,14 +1007,40 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
           if (parsed.images?.length) {
             currentAvatar = parsed.images[0]; // Update avatar for next loop
 
-            const stepResult = {
+            let stepResult: any = {
               item_index: idx,
               step: g + 1,
-              total_steps: garments.length,
+              total_steps: garmentInputs.length,
               images: parsed.images,
               text: parsed.text,
               prompt: prompt,
             };
+
+            // Store images in GridFS if requested
+            if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+              try {
+                const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+                  filenamePrefix: `tryon-item-${idx}-step-${g + 1}`,
+                  userId: body.userId,
+                  metadata: {
+                    type: 'try-on-generation',
+                    itemIndex: idx,
+                    step: g + 1,
+                    totalSteps: garmentInputs.length,
+                    aspect_ratio: body.aspect_ratio,
+                    style: body.style,
+                    generatedAt: new Date().toISOString()
+                  },
+                  expiry: '24h'
+                });
+                
+                stepResult.images = storedImages;
+                stepResult.storedInGridFS = true;
+              } catch (error) {
+                console.error('Error storing try-on images in GridFS:', error);
+                // Keep original images if storage fails
+              }
+            }
 
             // Stream the result for this step
             res.write(JSON.stringify(stepResult) + '\n');

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Signed URLs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        .error {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        img {
+            max-width: 100%;
+            margin-top: 20px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+        }
+        .info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        pre {
+            background: #263238;
+            color: #aed581;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔗 Signed URL Tester</h1>
+        
+        <div class="info">
+            <strong>📋 Instructions:</strong>
+            <ol>
+                <li>Generate an avatar with <code>storeInGridFS: true</code></li>
+                <li>Copy the <code>signedUrl</code> from the response</li>
+                <li>Paste it in the input below and click "Test URL"</li>
+            </ol>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Signed URL</h2>
+            <input 
+                type="text" 
+                id="signedUrl" 
+                placeholder="Paste your signed URL here (e.g., http://localhost:4000/api/files/...?token=...)"
+                value="">
+            <button onclick="testSignedUrl()">Test URL</button>
+            <div id="result"></div>
+            <div id="imageContainer"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Generate New Avatar</h2>
+            <button onclick="generateAvatar()">Generate Test Avatar</button>
+            <div id="generateResult"></div>
+        </div>
+
+        <div class="info">
+            <strong>🔍 Debug Info:</strong>
+            <div id="debugInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        async function testSignedUrl() {
+            const url = document.getElementById('signedUrl').value.trim();
+            const resultDiv = document.getElementById('result');
+            const imageContainer = document.getElementById('imageContainer');
+            
+            if (!url) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please enter a URL</div>';
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="result">⏳ Testing URL...</div>';
+            imageContainer.innerHTML = '';
+
+            try {
+                // Parse URL to check token
+                const urlObj = new URL(url);
+                const token = urlObj.searchParams.get('token');
+                
+                document.getElementById('debugInfo').innerHTML = `
+                    <pre>URL: ${urlObj.pathname}
+File ID: ${urlObj.pathname.split('/').pop()}
+Token Present: ${token ? 'Yes' : 'No'}
+Token Length: ${token ? token.length : 0}</pre>
+                `;
+
+                // Test the URL
+                const response = await fetch(url);
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const imageUrl = URL.createObjectURL(blob);
+                    
+                    resultDiv.innerHTML = `
+                        <div class="result">
+                            ✅ <strong>Success!</strong><br>
+                            Status: ${response.status} ${response.statusText}<br>
+                            Content-Type: ${response.headers.get('content-type')}<br>
+                            Size: ${(blob.size / 1024).toFixed(2)} KB
+                        </div>
+                    `;
+                    
+                    imageContainer.innerHTML = `<img src="${imageUrl}" alt="Test Image">`;
+                } else {
+                    const errorText = await response.text();
+                    let errorJson;
+                    try {
+                        errorJson = JSON.parse(errorText);
+                    } catch (e) {
+                        errorJson = { error: errorText };
+                    }
+                    
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            ❌ <strong>Error ${response.status}</strong><br>
+                            ${errorJson.error || 'Unknown error'}<br>
+                            ${errorJson.message || ''}
+                            <pre>${JSON.stringify(errorJson, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function generateAvatar() {
+            const resultDiv = document.getElementById('generateResult');
+            resultDiv.innerHTML = '<div class="result">⏳ Generating avatar...</div>';
+
+            try {
+                const response = await fetch('http://localhost:4000/api/photoshoot/avatar', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        hair_color: "black",
+                        eye_color: "brown",
+                        ethnicity: "south asian",
+                        age: 26,
+                        gender: "male",
+                        framing: "half-body",
+                        style: "studio headshot",
+                        background: "neutral gray",
+                        aspect_ratio: "3:4",
+                        storeInGridFS: true,
+                        userId: "user123"
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                // Read streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let results = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.trim()) {
+                            try {
+                                const data = JSON.parse(line);
+                                if (data.images && data.images.length > 0) {
+                                    results.push(data);
+                                }
+                            } catch (e) {
+                                // Skip invalid JSON lines
+                            }
+                        }
+                    }
+                }
+
+                if (results.length > 0) {
+                    const firstResult = results[0];
+                    const signedUrl = firstResult.images[0].signedUrl;
+                    
+                    document.getElementById('signedUrl').value = signedUrl;
+                    
+                    resultDiv.innerHTML = `
+                        <div class="result">
+                            ✅ <strong>Avatar Generated!</strong><br>
+                            Generated ${results.length} angles<br>
+                            First signed URL copied to input above<br>
+                            <button onclick="testSignedUrl()">Test It Now</button>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<div class="result error">❌ No images generated</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        ❌ <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        // Allow Enter key to submit
+        document.getElementById('signedUrl').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testSignedUrl();
+            }
+        });
+    </script>
+</body>
+</html>

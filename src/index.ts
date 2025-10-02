@@ -18,7 +18,8 @@ import {
   generatePhotoshoot, 
   generateFinalPhoto,
   generateAvatar,
-  addAccessories
+  addAccessories,
+  tryOn
 } from './photoshoot.controller';
 import {
   getGeneration,
@@ -28,6 +29,23 @@ import {
   createSession,
   getSession
 } from './database.controller';
+import {
+  uploadFileHandler,
+  generateSignedUrlHandler,
+  getFileInfoHandler,
+  deleteFileHandler,
+  listFilesHandler,
+  upload
+} from './file.controller';
+import {
+  streamFileHandler,
+  downloadFileHandler,
+  getFileMetadataHandler,
+  fileServiceHealthHandler
+} from './file-stream.controller';
+import { validateFileAccess } from './signed-url.service';
+import { optionalAuth, requireAuth } from './auth.middleware';
+import { simpleUploadHandler, upload as simpleUpload } from './upload.controller';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -156,6 +174,90 @@ app.post('/api/photoshoot/add-accessories', (req: Request, res: Response): void 
   // Call the actual addAccessories function
   addAccessories(req, res);
 });
+
+app.post('/api/photoshoot/tryon', (req: Request, res: Response): void => {
+  console.log('🎯 Try-on endpoint hit');
+  console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('🌐 Request headers:', req.headers);
+  console.log('⏰ Timestamp:', new Date().toISOString());
+  
+  // Call the actual tryOn function
+  tryOn(req, res);
+});
+
+// File service health check (most specific)
+app.get('/api/files/health', fileServiceHealthHandler);
+
+// Debug route to list all files in GridFS
+app.get('/api/debug/files', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const files = await listFilesHandler;
+    const { listFiles } = require('./gridfs.service');
+    const allFiles = await listFiles();
+    res.json({
+      count: allFiles.length,
+      files: allFiles.map((f: any) => ({
+        _id: f._id.toString(),
+        filename: f.filename,
+        length: f.length,
+        uploadDate: f.uploadDate,
+        contentType: f.contentType
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to list files', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Debug route to decode tokens
+app.get('/api/debug/token', (req: Request, res: Response): void => {
+  const { token } = req.query;
+  
+  if (!token || typeof token !== 'string') {
+    res.status(400).json({ error: 'Token required' });
+    return;
+  }
+  
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(token);
+    res.json({ decoded, token });
+  } catch (error) {
+    res.status(400).json({ 
+      error: 'Invalid token', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Debug route to check parameter capture
+app.get('/api/files/:id/debug', (req: Request, res: Response): void => {
+  res.json({
+    params: req.params,
+    query: req.query,
+    url: req.url,
+    originalUrl: req.originalUrl,
+    method: req.method
+  });
+});
+
+// Simple upload endpoint (returns signed URL immediately)
+app.post('/api/upload', simpleUpload.single('file'), simpleUploadHandler);
+
+// File upload and management routes (with optional authentication)
+app.post('/api/files/upload', optionalAuth, upload.single('file'), uploadFileHandler);
+app.get('/api/files', optionalAuth, listFilesHandler);
+app.post('/api/files/:fileId/signed-url', optionalAuth, generateSignedUrlHandler);
+app.get('/api/files/:fileId/info', optionalAuth, getFileInfoHandler);
+app.delete('/api/files/:fileId', requireAuth, deleteFileHandler);
+
+// File streaming routes (with token validation) - more specific routes first
+app.get('/api/files/:id/download', validateFileAccess, downloadFileHandler);
+app.get('/api/files/:id/metadata', validateFileAccess, getFileMetadataHandler);
+app.get('/api/files/:id', validateFileAccess, streamFileHandler);
 
 // 404 handler
 app.use('*', (req: Request, res: Response): void => {

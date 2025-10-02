@@ -34,8 +34,10 @@ export async function closeDatabaseConnection(): Promise<void> {
 
 export function getDatabase(): Db {
   if (!db) {
+    console.error('❌ Database not connected. Call connectToDatabase() first.');
     throw new Error('Database not connected. Call connectToDatabase() first.');
   }
+  console.log('✅ Database connection retrieved successfully');
   return db;
 }
 

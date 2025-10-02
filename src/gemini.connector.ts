@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import * as fs from 'node:fs';
+import { convertGeminiImagesToStorage, ImageStorageResult } from './image-storage.helper';
 
 type GeminiModality = 'TEXT' | 'IMAGE';
 
@@ -13,6 +14,9 @@ interface GeminiGenerateRequestBody {
   responseModalities?: GeminiModality[];
   saveImagesToDisk?: boolean;
   fileNamePrefix?: string;
+  storeImagesInGridFS?: boolean;
+  userId?: string;
+  metadata?: any;
 }
 
 function getExtensionFromMimeType(mimeType: string | undefined): string {
@@ -103,6 +107,7 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
     const parts = candidate?.content?.parts || [];
     let combinedText = '';
     const images: Array<{ mimeType: string; data: string; savedPath?: string }> = [];
+    let storedImages: ImageStorageResult[] = [];
 
     let imageIndex = 0;
     for (const part of parts) {
@@ -112,6 +117,7 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
         const mimeType: string = part.inlineData.mimeType || 'application/octet-stream';
         const data: string = part.inlineData.data || '';
         const entry: { mimeType: string; data: string; savedPath?: string } = { mimeType, data };
+        
         if (body.saveImagesToDisk) {
           const prefix = body.fileNamePrefix || 'gemini_output';
           const ext = getExtensionFromMimeType(mimeType);
@@ -120,7 +126,28 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
           fs.writeFileSync(filePath, buffer);
           entry.savedPath = filePath;
         }
+        
         images.push(entry);
+      }
+    }
+
+    // Store images in GridFS if requested
+    if (body.storeImagesInGridFS && images.length > 0) {
+      try {
+        storedImages = await convertGeminiImagesToStorage(images, {
+          filenamePrefix: body.fileNamePrefix || 'gemini-generated',
+          userId: body.userId,
+          metadata: {
+            ...body.metadata,
+            model: model,
+            prompt: body.prompt,
+            generatedAt: new Date().toISOString()
+          },
+          expiry: '24h'
+        });
+      } catch (error) {
+        console.error('Error storing images in GridFS:', error);
+        // Continue with response even if storage fails
       }
     }
 
@@ -128,7 +155,8 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
       success: true,
       model,
       text: combinedText || response.text || '',
-      images,
+      images: body.storeImagesInGridFS ? storedImages : images,
+      storedInGridFS: body.storeImagesInGridFS || false,
       urlContextMetadata: candidate?.urlContextMetadata,
     });
   } catch (error) {
@@ -173,6 +201,7 @@ export const geminiGenerateStream = async (req: Request, res: Response): Promise
 
     let combinedText = '';
     const images: Array<{ mimeType: string; data: string; savedPath?: string }> = [];
+    let storedImages: ImageStorageResult[] = [];
     let imageIndex = 0;
 
     for await (const chunk of stream as any) {
@@ -200,11 +229,33 @@ export const geminiGenerateStream = async (req: Request, res: Response): Promise
       }
     }
 
+    // Store images in GridFS if requested
+    if (body.storeImagesInGridFS && images.length > 0) {
+      try {
+        storedImages = await convertGeminiImagesToStorage(images, {
+          filenamePrefix: body.fileNamePrefix || 'gemini-stream-generated',
+          userId: body.userId,
+          metadata: {
+            ...body.metadata,
+            model: model,
+            prompt: body.prompt,
+            generatedAt: new Date().toISOString(),
+            streamed: true
+          },
+          expiry: '24h'
+        });
+      } catch (error) {
+        console.error('Error storing streamed images in GridFS:', error);
+        // Continue with response even if storage fails
+      }
+    }
+
     res.json({
       success: true,
       model,
       text: combinedText,
-      images,
+      images: body.storeImagesInGridFS ? storedImages : images,
+      storedInGridFS: body.storeImagesInGridFS || false,
     });
   } catch (error) {
     console.error('Gemini generate stream error:', error);
