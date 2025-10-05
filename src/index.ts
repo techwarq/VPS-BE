@@ -19,7 +19,8 @@ import {
   generateFinalPhoto,
   generateAvatar,
   addAccessories,
-  tryOn
+  tryOn,
+  generatePoseTransfer
 } from './photoshoot.controller';
 import {
   getGeneration,
@@ -183,6 +184,17 @@ app.post('/api/photoshoot/tryon', (req: Request, res: Response): void => {
   
   // Call the actual tryOn function
   tryOn(req, res);
+});
+
+// Pose transfer route with detailed logging
+app.post('/api/photoshoot/pose-transfer', (req: Request, res: Response): void => {
+  console.log('🎯 Pose transfer endpoint hit');
+  console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('🌐 Request headers:', req.headers);
+  console.log('⏰ Timestamp:', new Date().toISOString());
+  
+  // Call the actual generatePoseTransfer function
+  generatePoseTransfer(req, res);
 });
 
 // File service health check (most specific)
