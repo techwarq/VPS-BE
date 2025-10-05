@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import multer from 'multer';
 import { uploadFile, getFileInfo, deleteFile, listFiles } from './gridfs.service';
 import { generateSignedUrl, generateSignedUrlWithPermissions, generateUserSignedUrl } from './signed-url.service';
+import { connectToDatabase } from './database';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -38,6 +39,11 @@ export const uploadFileHandler = async (req: Request, res: Response): Promise<vo
 
     const { originalname, buffer, mimetype } = req.file;
     const { userId, metadata } = req.body;
+
+    // Ensure database connection is established (important for serverless environments)
+    console.log('🔌 Ensuring database connection...');
+    await connectToDatabase();
+    console.log('✅ Database connection confirmed');
 
     // Create a readable stream from buffer
     const { Readable } = require('stream');
@@ -89,6 +95,9 @@ export const generateSignedUrlHandler = async (req: Request, res: Response): Pro
   try {
     const { fileId } = req.params;
     const { userId, permissions, expiry, metadata } = req.body;
+
+    // Ensure database connection is established
+    await connectToDatabase();
 
     // Check if file exists
     const fileInfo = await getFileInfo(fileId);
@@ -148,6 +157,9 @@ export const getFileInfoHandler = async (req: Request, res: Response): Promise<v
   try {
     const { fileId } = req.params;
     
+    // Ensure database connection is established
+    await connectToDatabase();
+    
     const fileInfo = await getFileInfo(fileId);
     if (!fileInfo) {
       res.status(404).json({
@@ -185,6 +197,9 @@ export const deleteFileHandler = async (req: Request, res: Response): Promise<vo
   try {
     const { fileId } = req.params;
     
+    // Ensure database connection is established
+    await connectToDatabase();
+    
     const success = await deleteFile(fileId);
     if (!success) {
       res.status(404).json({
@@ -214,6 +229,9 @@ export const deleteFileHandler = async (req: Request, res: Response): Promise<vo
 export const listFilesHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId, limit = 50, skip = 0 } = req.query;
+    
+    // Ensure database connection is established
+    await connectToDatabase();
     
     let filter: any = {};
     if (userId) {

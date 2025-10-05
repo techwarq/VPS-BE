@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Readable } from 'stream';
 import { uploadFile } from './gridfs.service';
 import { generateSignedUrl } from './signed-url.service';
+import { connectToDatabase } from './database';
 import multer from 'multer';
 
 // Configure multer for memory storage
@@ -49,6 +50,11 @@ export const simpleUploadHandler = async (req: Request, res: Response): Promise<
       mimetype: mimetype,
       userId: userId
     });
+
+    // Ensure database connection is established (important for serverless environments)
+    console.log('🔌 Ensuring database connection...');
+    await connectToDatabase();
+    console.log('✅ Database connection confirmed');
 
     // Create a readable stream from buffer
     const stream = new Readable();

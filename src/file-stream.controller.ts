@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { downloadFile, getFileInfo } from './gridfs.service';
 import { validateFileAccess } from './signed-url.service';
+import { connectToDatabase } from './database';
 
 /**
  * Stream a file with token validation
@@ -11,6 +12,9 @@ export const streamFileHandler = async (req: Request, res: Response): Promise<vo
     const { id: fileId } = req.params;
     console.log('🔍 StreamFileHandler: Looking for file ID:', fileId);
     console.log('🔍 StreamFileHandler: req.params:', req.params);
+    
+    // Ensure database connection is established
+    await connectToDatabase();
     
     // Get file information first
     const fileInfo = await getFileInfo(fileId);
@@ -93,6 +97,9 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
   try {
     const { id: fileId } = req.params;
     
+    // Ensure database connection is established
+    await connectToDatabase();
+    
     // Get file information first
     const fileInfo = await getFileInfo(fileId);
     if (!fileInfo) {
@@ -149,6 +156,9 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
 export const getFileMetadataHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: fileId } = req.params;
+    
+    // Ensure database connection is established
+    await connectToDatabase();
     
     const fileInfo = await getFileInfo(fileId);
     if (!fileInfo) {
