@@ -3,7 +3,7 @@ import { Request, Response } from 'express';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; // 5 minutes default
-const BASE_URL = process.env.BASE_URL || 'https://vps-fe.vercel.app';
+const BASE_URL = process.env.BASE_URL || 'https://vps-be.vercel.app';
 
 export interface SignedUrlPayload {
   fileId: string;
