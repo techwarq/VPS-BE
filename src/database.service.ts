@@ -225,6 +225,9 @@ export class DatabaseService {
       totalImages,
       totalSessions: sessionStats
     };
+
+
+
   }
 }
 
