@@ -120,7 +120,7 @@ JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRY=5m
 
 # Base URL for signed URLs
-BASE_URL=http://localhost:4000
+BASE_URL=https://vps-be.vercel.app
 
 # MongoDB (already configured)
 MONGODB_URI=mongodb://localhost:27017/your-database

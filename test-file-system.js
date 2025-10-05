@@ -7,7 +7,7 @@ const FormData = require('form-data');
 const fs = require('fs');
 const fetch = require('node-fetch');
 
-const BASE_URL = 'http://localhost:4000';
+const BASE_URL = 'https://vps-be.vercel.app';
 
 // Test configuration
 const TEST_CONFIG = {
