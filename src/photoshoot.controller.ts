@@ -1331,9 +1331,43 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
         body.prompt ? `Incorporate these user hints: ${body.prompt}` : "",
       ].filter(Boolean).join("\n");
 
+      // Convert image URLs to base64 format
+      let mainImageData: { mimeType: string; data: string };
+      try {
+        mainImageData = await fetchImageAsBase64(image);
+      } catch (error) {
+        const errorResult = { 
+          item_index: i, 
+          error: `Failed to process main image: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        };
+        res.write(JSON.stringify(errorResult) + '\n');
+        continue;
+      }
+
+      // Convert accessory images to base64 format
+      const accessoryImagesData: Array<{ mimeType: string; data: string }> = [];
+      for (const acc of accessories) {
+        try {
+          const accImageData = await fetchImageAsBase64(acc.url);
+          accessoryImagesData.push(accImageData);
+        } catch (error) {
+          console.warn(`Failed to process accessory image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          // Continue without this accessory rather than failing completely
+        }
+      }
+
+      if (accessoryImagesData.length === 0) {
+        const errorResult = { 
+          item_index: i, 
+          error: 'Failed to process any accessory images' 
+        };
+        res.write(JSON.stringify(errorResult) + '\n');
+        continue;
+      }
+
       const plannerInputFiles = [
-        { inlineData: { mimeType: 'image/jpeg', data: image } },
-        ...accessories.map(acc => ({ inlineData: { mimeType: 'image/jpeg', data: acc.url } })),
+        { inlineData: mainImageData },
+        ...accessoryImagesData.map(accData => ({ inlineData: accData })),
       ];
 
       let plan: any;
@@ -1368,8 +1402,8 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
 
       // Send ALL Images (Avatar + Accessories) to the Generator
       const imageGeneratorInputFiles = [
-        { inlineData: { mimeType: 'image/png', data: image } }, // The main avatar
-        ...accessories.map(acc => ({ inlineData: { mimeType: 'image/jpeg', data: acc.url } })) // The accessories
+        { inlineData: mainImageData }, // The main avatar
+        ...accessoryImagesData.map(accData => ({ inlineData: accData })) // The accessories
       ];
 
       for (const shot of plan.shots) {
