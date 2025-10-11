@@ -87,13 +87,15 @@ interface TryOnRequestBody {
 
 interface PoseRequestBody {
   items: Array<{
-    image: { mimeType: string; data: string }; // base64 for main image
-    pose_reference?: { mimeType: string; data: string }; // base64 for pose reference
+    image: { mimeType: string; data: string } | { signedUrl: string }; // base64 for main image or signed URL
+    pose_reference?: { mimeType: string; data: string } | { signedUrl: string }; // base64 for pose reference or signed URL
     background_prompt?: string;
     pose_prompt?: string;
   }>;
   aspect_ratio?: string;
   negative_prompt?: string;
+  storeInGridFS?: boolean;
+  userId?: string;
 }
 
 // New interfaces for improved functionality
@@ -209,10 +211,13 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
 }
 
 // Helper function to convert image input to base64 format
-async function convertImageInputToBase64(input: string | { mimeType: string; data: string }): Promise<{ mimeType: string; data: string }> {
+async function convertImageInputToBase64(input: string | { mimeType: string; data: string } | { signedUrl: string }): Promise<{ mimeType: string; data: string }> {
   if (typeof input === 'string') {
     // It's a URL, fetch it
     return await fetchImageAsBase64(input);
+  } else if ('signedUrl' in input) {
+    // It's a signed URL object, fetch it
+    return await fetchImageAsBase64(input.signedUrl);
   } else {
     // It's already in base64 format
     return input;
@@ -1107,40 +1112,66 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
         continue;
       }
 
-      const hasPoseRef = !!item.pose_reference;
+      // Convert image input to base64 format if it's a signed URL
+      let imageData: { mimeType: string; data: string };
+      try {
+        imageData = await convertImageInputToBase64(item.image);
+      } catch (error) {
+        const errorResult = { 
+          item_index: i, 
+          error: `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}` 
+        };
+        res.write(JSON.stringify(errorResult) + '\n');
+        continue;
+      }
+
+      // Convert pose reference to base64 format if it exists and is a signed URL
+      let poseRefData: { mimeType: string; data: string } | undefined;
+      if (item.pose_reference) {
+        try {
+          poseRefData = await convertImageInputToBase64(item.pose_reference);
+        } catch (error) {
+          console.warn(`Failed to process pose reference for item ${i}:`, error);
+          // Continue without pose reference rather than failing completely
+        }
+      }
+
+      const hasPoseRef = !!poseRefData;
       const hasPosePrompt = !!item.pose_prompt && item.pose_prompt.trim().length > 0;
       const mode = hasPoseRef && hasPosePrompt ? "pose_both" : hasPoseRef ? "pose_reference" : "pose_prompt";
 
       // --- START: POSE PURIFICATION HACK ---
-      console.log(`Starting Pose Purification for: ${item.pose_reference}`);
+      console.log(`Starting Pose Purification for item ${i}`);
 
       // STEP 1: Create a "clean" pose reference image.
       const purificationPrompt = "Analyze the input image. Identify the exact pose of the person. Create a new image of a featureless, gender-neutral, gray mannequin in that exact same pose. The background must be solid black. Preserve the pose with perfect accuracy. Discard all clothing, facial features, and original background.";
       
-      let purifiedPoseRef = item.pose_reference; // Fallback to original if purification fails
-      try {
-        const purifiedResponse = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
-          contents: [{ 
-            role: 'user', 
-            parts: [
-              { text: purificationPrompt },
-              { inlineData: item.pose_reference! }
-            ] 
-          }],
-          responseModalities: ['IMAGE', 'TEXT'],
-        });
+      let purifiedPoseRef = poseRefData; // Fallback to original if purification fails
+      if (poseRefData) {
+        try {
+          const purifiedResponse = await gemini.generateContent({
+            model: 'gemini-2.5-flash-image-preview',
+            contents: [{ 
+              role: 'user', 
+              parts: [
+                { text: purificationPrompt },
+                { inlineData: { mimeType: poseRefData.mimeType, data: poseRefData.data } }
+              ] 
+            }],
+            responseModalities: ['IMAGE', 'TEXT'],
+          });
 
-        const purifiedParsed = parseGeminiParts(purifiedResponse.candidates?.[0]);
-        if (purifiedParsed.images && purifiedParsed.images.length > 0) {
-          purifiedPoseRef = purifiedParsed.images[0];
-          console.log(`Pose Purification successful. Using new reference.`);
-        } else {
-          console.warn("Pose Purification returned no image. Using original pose reference.");
+          const purifiedParsed = parseGeminiParts(purifiedResponse.candidates?.[0]);
+          if (purifiedParsed.images && purifiedParsed.images.length > 0) {
+            purifiedPoseRef = purifiedParsed.images[0];
+            console.log(`Pose Purification successful. Using new reference.`);
+          } else {
+            console.warn("Pose Purification returned no image. Using original pose reference.");
+          }
+        } catch (purifyError) {
+          console.error("Pose Purification step failed:", purifyError);
+          console.warn("Falling back to original pose reference.");
         }
-      } catch (purifyError) {
-        console.error("Pose Purification step failed:", purifyError);
-        console.warn("Falling back to original pose reference.");
       }
       // --- END: POSE PURIFICATION HACK ---
 
@@ -1160,12 +1191,12 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
       ].filter(Boolean).join(" ");
 
       const input_parts = [
-        { inlineData: item.image },
+        { inlineData: { mimeType: imageData.mimeType, data: imageData.data } },
         { text: basePrompt }
       ];
       
-      if (hasPoseRef) {
-        input_parts.splice(1, 0, { inlineData: purifiedPoseRef! });
+      if (hasPoseRef && purifiedPoseRef) {
+        input_parts.splice(1, 0, { inlineData: { mimeType: purifiedPoseRef.mimeType, data: purifiedPoseRef.data } });
       }
 
       try {
