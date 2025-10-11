@@ -240,7 +240,7 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
     for (let i = 0; i < count; i++) {
       try {
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           responseModalities: ['IMAGE', 'TEXT'],
         });
@@ -438,7 +438,7 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
     for (let i = 0; i < count; i++) {
       try {
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           responseModalities: ['IMAGE', 'TEXT'],
         });
@@ -531,7 +531,7 @@ export const generatePhotoshoot = async (req: Request, res: Response): Promise<v
         for (const img of group.images) parts.push({ inlineData: img });
         
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ role: 'user', parts }],
           responseModalities: ['IMAGE', 'TEXT'],
         });
@@ -595,7 +595,7 @@ export const generateFinalPhoto = async (req: Request, res: Response): Promise<v
         for (const img of group.images) parts.push({ inlineData: img });
         
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ role: 'user', parts }],
           responseModalities: ['IMAGE', 'TEXT'],
         });
@@ -753,7 +753,7 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
     // Generate first image (front angle)
     const firstPrompt = plan.angles[0].prompt;
     const firstResponse = await gemini.generateContent({
-      model: 'gemini-2.5-flash-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: [{ role: 'user', parts: [{ text: firstPrompt }] }],
       responseModalities: ['IMAGE', 'TEXT'],
     });
@@ -809,7 +809,7 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       
       try {
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ 
             role: 'user', 
             parts: [
@@ -885,11 +885,11 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// Try-on endpoint with streaming
+// Try-on endpoint with streaming for multi-garment outfits
 export const tryOn = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as TryOnRequestBody;
-    
+
     if (!Array.isArray(body.items) || body.items.length === 0) {
       res.status(400).json({ error: "'items' must be a non-empty array" });
       return;
@@ -906,165 +906,99 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
     const styleLine = body.style ? `The overall style should be: ${body.style}.` : "The style should be photorealistic.";
     const negLine = body.negative_prompt ? `Avoid the following: ${body.negative_prompt}.` : "";
 
+    // Loop through each OUTFIT request in the 'items' array
     for (let idx = 0; idx < body.items.length; idx++) {
       const item = body.items[idx];
-      const initialAvatarInput = item.avatar_image;
+      const avatarInput = item.avatar_image;
       const garmentInputs = Array.isArray(item.garment_images) ? item.garment_images : [];
-      
-      if (!initialAvatarInput || garmentInputs.length === 0) {
+
+      if (!avatarInput || garmentInputs.length === 0) {
         const err = {
           item_index: idx,
-          error: !initialAvatarInput ? 'Missing avatar_image' : 'No garment_images provided'
+          error: !avatarInput ? 'Missing avatar_image' : 'No garment_images provided'
         };
         res.write(JSON.stringify(err) + '\n');
         continue;
       }
 
-      // Convert avatar image to base64 format
-      let currentAvatar: { mimeType: string; data: string };
       try {
-        currentAvatar = await convertImageInputToBase64(initialAvatarInput);
-      } catch (error) {
-        const err = {
-          item_index: idx,
-          error: `Failed to process avatar image: ${error instanceof Error ? error.message : 'Unknown error'}`
-        };
-        res.write(JSON.stringify(err) + '\n');
-        continue;
-      }
+        // --- STEP 1: Process all images for the outfit in parallel ---
+        const avatar = await convertImageInputToBase64(avatarInput);
+        
+        const garments = await Promise.all(
+          garmentInputs.map(gInput => convertImageInputToBase64(gInput))
+        );
 
-      for (let g = 0; g < garmentInputs.length; g++) {
-        const garmentInput = garmentInputs[g];
-        
-        // Convert garment image to base64 format
-        let garment: { mimeType: string; data: string };
-        try {
-          garment = await convertImageInputToBase64(garmentInput);
-        } catch (error) {
-          const err = {
-            item_index: idx,
-            step: g + 1,
-            error: `Failed to process garment image: ${error instanceof Error ? error.message : 'Unknown error'}`
-          };
-          res.write(JSON.stringify(err) + '\n');
-          continue;
-        }
-        
-        const isFirstGarment = (g === 0);
-        let prompt = '';
-        
-        if (isFirstGarment) {
-          // --- NEW, IMPROVED PROMPT FOR FIRST GARMENT ---
-          prompt = [
-            "You are an expert virtual stylist creating a professional e-commerce fashion photo.",
-            "The first input image is the model. The second input image is a piece of clothing.",
-            "Generate a photorealistic, full-body shot of the model from the first image wearing the garment from the second image.",
-            "**Identity Preservation is Paramount:** The model's face, hair, skin tone, and physical features must remain completely unchanged. It must be the exact same person.",
-            "**Garment Integration:** The new clothing should realistically replace whatever the model was originally wearing. Ensure a natural fit, drape, and texture, with accurate lighting and shadows that match a professional studio environment.",
-            "The background must be a seamless, neutral light gray studio backdrop.",
-            styleLine,
-            negLine
-          ].filter(Boolean).join(" ");
-        } else {
-          // --- NEW, IMPROVED PROMPT FOR SEQUENTIAL LAYERING ---
-          prompt = [
-            "You are an expert virtual stylist continuing a layering task.",
-            "The first input image shows a model already wearing one or more items. The second input image is a new garment to add.",
-            "Your task is to layer the new garment from the second image ON TOP of the clothing the model is already wearing in the first image.",
-            "**CRITICAL RULE: DO NOT CHANGE ANYTHING FROM THE FIRST IMAGE.** The model's identity (face, hair), pose, and all existing clothing must be perfectly preserved. You are only adding the new item.",
-            "Render the new garment with a realistic fit and drape over the existing clothes. For example, if adding a jacket, it should go over the shirt shown in the first image.",
-            "The final image must show the model wearing all previous items PLUS the new one.",
-            "Maintain the seamless, neutral light gray studio background and professional lighting.",
-            styleLine,
-            negLine
-          ].filter(Boolean).join(" ");
-        }
+        // --- STEP 2: Create the new multi-garment prompt ---
+        const garmentCount = garments.length;
+        const prompt = [
+          "You are an expert virtual stylist creating a professional e-commerce fashion photo from multiple inputs.",
+          `**Task:** Create a single, photorealistic, full-body image of the model from the first image wearing a complete outfit composed of the ${garmentCount} garments from the subsequent images.`,
+          "**Inputs:**",
+          "- The VERY FIRST image is the model.",
+          `- The NEXT ${garmentCount} images are the individual clothing items (e.g., a shirt, pants, etc.).`,
+          "**Instructions:**",
+          "1. **Combine the Garments:** Accurately dress the model in ALL the provided clothing items to form a coherent outfit. The clothes must fit and layer naturally (e.g., shirt tucked into pants).",
+          "2. **Identity Preservation is CRITICAL:** The model's face, hair, skin tone, and body shape must remain IDENTICAL to the first input image. It must be the exact same person.",
+          "3. **Background:** The background must be a seamless, neutral light gray studio backdrop.",
+          "4. **Realism:** Ensure natural fit, drape, and texture for all clothes, with realistic lighting and shadows.",
+          styleLine,
+          negLine
+        ].filter(Boolean).join(" ");
 
+        // --- STEP 3: Assemble the API request with all images ---
         const input_parts = [
-          { inlineData: currentAvatar },
-          { inlineData: garment },
+          { inlineData: avatar },
+          ...garments.map(g => ({ inlineData: g })), // Spread all garment images
           { text: prompt }
         ];
-
-        // Add reference model images if provided
+        
+        // (Optional) Add reference model images if provided
         if (item.reference_model_images) {
-          for (const refImgInput of item.reference_model_images) {
+           for (const refImgInput of item.reference_model_images) {
             try {
               const refImg = await convertImageInputToBase64(refImgInput);
               input_parts.push({ inlineData: refImg });
             } catch (error) {
-              console.warn(`Failed to process reference model image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-              // Continue without this reference image
+              console.warn(`Failed to process reference model image.`);
             }
           }
         }
+        
+        // --- STEP 4: Make a SINGLE API call for the entire outfit ---
+        const response = await gemini.generateContent({
+          model: 'gemini-2.5-pro', // Highly recommend Pro for this complex task
+          contents: [{ role: 'user', parts: input_parts }],
+          responseModalities: ['IMAGE', 'TEXT'],
+        });
 
-        try {
-          const response = await gemini.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
-            contents: [{ role: 'user', parts: input_parts }],
-            responseModalities: ['IMAGE', 'TEXT'],
-          });
-
-          const parsed = parseGeminiParts(response.candidates?.[0]);
-          if (parsed.images?.length) {
-            currentAvatar = parsed.images[0]; // Update avatar for next loop
-
-            let stepResult: any = {
-              item_index: idx,
-              step: g + 1,
-              total_steps: garmentInputs.length,
-              images: parsed.images,
-              text: parsed.text,
-              prompt: prompt,
-            };
-
-            // Store images in GridFS if requested
-            if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
-              try {
-                const storedImages = await convertGeminiImagesToStorage(parsed.images, {
-                  filenamePrefix: `tryon-item-${idx}-step-${g + 1}`,
-                  userId: body.userId,
-                  metadata: {
-                    type: 'try-on-generation',
-                    itemIndex: idx,
-                    step: g + 1,
-                    totalSteps: garmentInputs.length,
-                    aspect_ratio: body.aspect_ratio,
-                    style: body.style,
-                    generatedAt: new Date().toISOString()
-                  },
-                  expiry: '24h'
-                });
-                
-                stepResult.images = storedImages;
-                stepResult.storedInGridFS = true;
-              } catch (error) {
-                console.error('Error storing try-on images in GridFS:', error);
-                // Keep original images if storage fails
-              }
-            }
-
-            // Stream the result for this step
-            res.write(JSON.stringify(stepResult) + '\n');
-          } else {
-            const errorResult = { 
-              item_index: idx, 
-              step: g + 1, 
-              error: `Generation returned no images for garment step ${g + 1}` 
-            };
-            res.write(JSON.stringify(errorResult) + '\n');
-            break;
-          }
-        } catch (genErr: any) {
-          const errorResult = { 
-            item_index: idx, 
-            step: g + 1, 
-            error: genErr?.message || 'Unknown generation error' 
+        const parsed = parseGeminiParts(response.candidates?.[0]);
+        if (parsed.images?.length) {
+          let result: any = {
+            item_index: idx,
+            images: parsed.images,
+            text: parsed.text,
+            prompt: prompt,
           };
-          res.write(JSON.stringify(errorResult) + '\n');
-          break;
+
+          if (body.storeInGridFS) {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, { /* your config */ });
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          }
+          
+          res.write(JSON.stringify(result) + '\n');
+        } else {
+          throw new Error("Generation returned no images for the outfit.");
         }
+
+      } catch (genErr: any) {
+        const errorResult = { 
+          item_index: idx,
+          error: genErr?.message || 'Unknown error during outfit generation' 
+        };
+        res.write(JSON.stringify(errorResult) + '\n');
+        continue; // Move to the next item in the request
       }
     }
 
@@ -1075,8 +1009,6 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
     if (!res.headersSent) {
       res.status(500).json({ error: 'Try-on failed', message: (error as Error).message });
     } else {
-      const errorPayload = { error: `Try-on failed: ${(error as Error).message}` };
-      res.write(JSON.stringify(errorPayload) + '\n');
       res.end();
     }
   }
@@ -1148,7 +1080,7 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
       if (poseRefData) {
         try {
           const purifiedResponse = await gemini.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
+            model: 'gemini-2.5-flash-image',
             contents: [{ 
               role: 'user', 
               parts: [
@@ -1199,7 +1131,7 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
 
       try {
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ role: 'user', parts: input_parts }],
           responseModalities: ['IMAGE', 'TEXT'],
         });
@@ -1409,7 +1341,7 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
       for (const shot of plan.shots) {
         try {
           const response = await gemini.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
+            model: 'gemini-2.5-flash-image',
             contents: [{ 
               role: 'user', 
               parts: [
