@@ -1422,13 +1422,36 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
 
           const parsed = parseGeminiParts(response.candidates?.[0]);
           if (parsed.images && parsed.images.length > 0) {
-            const result = { 
+            let result: any = { 
               item_index: i, 
               shot_name: shot.name, 
               prompt: shot.prompt, 
               images: parsed.images,
               text: parsed.text
             };
+
+            // Store images in GridFS and return signed URLs
+            try {
+              const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+                filenamePrefix: `accessories-item-${i}-${shot.name}`,
+                metadata: {
+                  type: 'add-accessories',
+                  itemIndex: i,
+                  shotName: shot.name,
+                  prompt: shot.prompt,
+                  aspect_ratio: body.aspect_ratio,
+                  generatedAt: new Date().toISOString()
+                },
+                expiry: '24h'
+              });
+              
+              result.images = storedImages;
+              result.storedInGridFS = true;
+            } catch (error) {
+              console.error('Error storing accessories images in GridFS:', error);
+              // Keep original images if storage fails
+            }
+
             res.write(JSON.stringify(result) + '\n');
           } else {
             throw new Error("Image generation returned no results.");
