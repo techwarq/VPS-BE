@@ -87,15 +87,13 @@ interface TryOnRequestBody {
 
 interface PoseRequestBody {
   items: Array<{
-    image: { mimeType: string; data: string } | { signedUrl: string }; // base64 for main image or signed URL
-    pose_reference?: { mimeType: string; data: string } | { signedUrl: string }; // base64 for pose reference or signed URL
+    image: string;           // Main subject image URL
+    pose_reference?: string; // Pose reference image URL
     background_prompt?: string;
     pose_prompt?: string;
   }>;
-  aspect_ratio?: string;
-  negative_prompt?: string;
-  storeInGridFS?: boolean;
-  userId?: string;
+  aspect_ratio?: string;        // Optional, defaults to "3:4"
+  negative_prompt?: string;     // Optional
 }
 
 // New interfaces for improved functionality
@@ -1112,10 +1110,10 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
         continue;
       }
 
-      // Convert image input to base64 format if it's a signed URL
+      // Convert image URL to base64 format
       let imageData: { mimeType: string; data: string };
       try {
-        imageData = await convertImageInputToBase64(item.image);
+        imageData = await fetchImageAsBase64(item.image);
       } catch (error) {
         const errorResult = { 
           item_index: i, 
@@ -1125,11 +1123,11 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
         continue;
       }
 
-      // Convert pose reference to base64 format if it exists and is a signed URL
+      // Convert pose reference URL to base64 format if it exists
       let poseRefData: { mimeType: string; data: string } | undefined;
       if (item.pose_reference) {
         try {
-          poseRefData = await convertImageInputToBase64(item.pose_reference);
+          poseRefData = await fetchImageAsBase64(item.pose_reference);
         } catch (error) {
           console.warn(`Failed to process pose reference for item ${i}:`, error);
           // Continue without pose reference rather than failing completely
@@ -1208,7 +1206,7 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
         if (parsed.images?.length) {
-          const result = {
+          let result: any = {
             item_index: i,
             mode,
             images: parsed.images,
@@ -1216,6 +1214,29 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
             background_prompt: item.background_prompt || undefined,
             pose_prompt: item.pose_prompt || undefined,
           };
+
+          // Store images in GridFS and return signed URLs
+          try {
+            const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+              filenamePrefix: `pose-transfer-item-${i}`,
+              metadata: {
+                type: 'pose-transfer',
+                itemIndex: i,
+                mode: mode,
+                background_prompt: item.background_prompt,
+                pose_prompt: item.pose_prompt,
+                aspect_ratio: body.aspect_ratio,
+                generatedAt: new Date().toISOString()
+              },
+              expiry: '24h'
+            });
+            
+            result.images = storedImages;
+            result.storedInGridFS = true;
+          } catch (error) {
+            console.error('Error storing pose transfer images in GridFS:', error);
+            // Keep original images if storage fails
+          }
           
           // Stream the result
           res.write(JSON.stringify(result) + '\n');
