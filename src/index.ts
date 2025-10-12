@@ -36,6 +36,8 @@ import {
   getFileInfoHandler,
   deleteFileHandler,
   listFilesHandler,
+  bulkDeleteFilesHandler,
+  deleteFilesByFilterHandler,
   upload
 } from './file.controller';
 import {
@@ -264,7 +266,11 @@ app.post('/api/files/upload', optionalAuth, upload.single('file'), uploadFileHan
 app.get('/api/files', optionalAuth, listFilesHandler);
 app.post('/api/files/:fileId/signed-url', optionalAuth, generateSignedUrlHandler);
 app.get('/api/files/:fileId/info', optionalAuth, getFileInfoHandler);
-app.delete('/api/files/:fileId', requireAuth, deleteFileHandler);
+app.delete('/api/files/:fileId', optionalAuth, deleteFileHandler);
+
+// Bulk delete and filtered delete routes
+app.post('/api/files/bulk-delete', optionalAuth, bulkDeleteFilesHandler);
+app.post('/api/files/delete-by-filter', optionalAuth, deleteFilesByFilterHandler);
 
 // File streaming routes (with token validation) - more specific routes first
 app.get('/api/files/:id/download', validateFileAccess, downloadFileHandler);

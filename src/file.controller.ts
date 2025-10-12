@@ -228,7 +228,7 @@ export const deleteFileHandler = async (req: Request, res: Response): Promise<vo
  */
 export const listFilesHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { userId, limit = 50, skip = 0 } = req.query;
+    const { userId, type, limit = 50, skip = 0 } = req.query;
     
     // Ensure database connection is established
     await connectToDatabase();
@@ -236,6 +236,9 @@ export const listFilesHandler = async (req: Request, res: Response): Promise<voi
     let filter: any = {};
     if (userId) {
       filter['metadata.uploadedBy'] = userId;
+    }
+    if (type) {
+      filter['metadata.type'] = type;
     }
 
     const files = await listFiles(filter);
@@ -260,6 +263,162 @@ export const listFilesHandler = async (req: Request, res: Response): Promise<voi
     console.error('List files error:', error);
     res.status(500).json({
       error: 'Failed to list files',
+      message: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
+  }
+};
+
+/**
+ * Bulk delete files by IDs
+ */
+export const bulkDeleteFilesHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { fileIds } = req.body;
+    
+    if (!Array.isArray(fileIds) || fileIds.length === 0) {
+      res.status(400).json({
+        error: 'Invalid request',
+        message: 'fileIds must be a non-empty array'
+      });
+      return;
+    }
+
+    // Ensure database connection is established
+    await connectToDatabase();
+    
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const fileId of fileIds) {
+      try {
+        const success = await deleteFile(fileId);
+        if (success) {
+          successCount++;
+          results.push({ fileId, status: 'deleted' });
+        } else {
+          failCount++;
+          results.push({ fileId, status: 'not_found' });
+        }
+      } catch (error) {
+        failCount++;
+        results.push({ 
+          fileId, 
+          status: 'error', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Bulk delete completed: ${successCount} deleted, ${failCount} failed`,
+      results: {
+        total: fileIds.length,
+        deleted: successCount,
+        failed: failCount,
+        details: results
+      }
+    });
+
+  } catch (error) {
+    console.error('Bulk delete files error:', error);
+    res.status(500).json({
+      error: 'Failed to bulk delete files',
+      message: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
+  }
+};
+
+/**
+ * Delete files by metadata filters
+ */
+export const deleteFilesByFilterHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { userId, type, olderThan, limit = 100 } = req.body;
+    
+    // Ensure database connection is established
+    await connectToDatabase();
+    
+    let filter: any = {};
+    if (userId) {
+      filter['metadata.uploadedBy'] = userId;
+    }
+    if (type) {
+      filter['metadata.type'] = type;
+    }
+    if (olderThan) {
+      const cutoffDate = new Date(olderThan);
+      filter['uploadDate'] = { $lt: cutoffDate };
+    }
+
+    // Get files matching the filter
+    const files = await listFiles(filter);
+    const filesToDelete = files.slice(0, Number(limit));
+
+    if (filesToDelete.length === 0) {
+      res.json({
+        success: true,
+        message: 'No files found matching the criteria',
+        results: {
+          total: 0,
+          deleted: 0,
+          failed: 0
+        }
+      });
+      return;
+    }
+
+    const results = [];
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const file of filesToDelete) {
+      try {
+        const success = await deleteFile(file._id.toString());
+        if (success) {
+          successCount++;
+          results.push({ 
+            fileId: file._id.toString(), 
+            filename: file.filename,
+            size: file.length,
+            status: 'deleted' 
+          });
+        } else {
+          failCount++;
+          results.push({ 
+            fileId: file._id.toString(), 
+            filename: file.filename,
+            status: 'delete_failed' 
+          });
+        }
+      } catch (error) {
+        failCount++;
+        results.push({ 
+          fileId: file._id.toString(), 
+          filename: file.filename,
+          status: 'error', 
+          error: error instanceof Error ? error.message : 'Unknown error' 
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Filtered delete completed: ${successCount} deleted, ${failCount} failed`,
+      filter: filter,
+      results: {
+        total: filesToDelete.length,
+        deleted: successCount,
+        failed: failCount,
+        details: results
+      }
+    });
+
+  } catch (error) {
+    console.error('Delete files by filter error:', error);
+    res.status(500).json({
+      error: 'Failed to delete files by filter',
       message: error instanceof Error ? error.message : 'Unknown error occurred'
     });
   }
