@@ -340,7 +340,7 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
     for (let i = 0; i < body.count; i++) {
       try {
         const response = await gemini.generateContent({
-          model: 'gemini-2.5-flash-image-preview',
+          model: 'gemini-2.5-flash-image',
           contents: [{ 
             role: 'user', 
             parts: [
@@ -1105,20 +1105,26 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
       }
       // --- END: POSE PURIFICATION HACK ---
 
-      // STEP 2: Use the (potentially purified) pose reference for the final transfer.
       const basePrompt = [
-        "**Objective: High-Fidelity Pose Replication.**",
-        "You will receive two images: [Image 1: The Subject], [Image 2: A Clean Pose Mannequin].",
-        "Your mission is to generate a NEW image where the person and clothing from [Image 1] are perfectly rendered in the exact pose shown by the mannequin in [Image 2].",
-        "**ATTENTION: Replicate the mannequin's pose with perfect precision. Details like shoulder angle, hand position, and head tilt are mandatory. It is a failure if you do not generate a new image based on the subject from Image 1.**",
+        "**Objective: Precise Pose Transfer.**",
+        "You will receive two primary images: [Image 1: The Subject] and [Image 2: The Pose Reference]. Your task is to generate a new photorealistic image where the person and their complete outfit from [Image 1] are perfectly transferred into the exact pose from [Image 2].",
+        
+        "**CRITICAL RULES - NON-NEGOTIABLE:**",
+        "1. **IDENTITY & CLOTHING PRESERVATION IS THE #1 PRIORITY.**",
+        "2. **DO NOT CHANGE THE SUBJECT:** The person's face, hair, body type, and skin tone from [Image 1] must be preserved with 100% accuracy. It must be the exact same person.",
+        "3. **DO NOT CHANGE THE OUTFIT:** The clothing, including its type, color, texture, and fit from [Image 1], must be transferred exactly as is. Do not add, remove, or alter any part of the outfit.",
+        "4. **POSE ACCURACY IS MANDATORY:** The final pose must be an exact match to the pose in [Image 2].",
+
         "**Execution Algorithm:**",
-        "1. **Analyze [Image 1] (The Subject):** MEMORIZE the subject's face, hair, and complete outfit.",
-        "2. **Analyze [Image 2] (The Mannequin):** EXTRACT the precise skeletal structure.",
-        "3. **Synthesize the Final Image:** RENDER the person and outfit from [Image 1], arranged in the exact skeletal pose from [Image 2].",
+        "1. **Analyze [Image 1] (The Subject):** Extract all appearance data (face, body, clothes). This is the source for appearance ONLY.",
+        "2. **Analyze [Image 2] (The Pose):** Extract the precise skeletal structure. This is the source for the pose ONLY.",
+        "3. **Synthesize Final Image:** Apply the full appearance data from Step 1 onto the skeletal pose from Step 2.",
+
         item.background_prompt 
           ? `**BACKGROUND OVERRIDE:** The final background MUST be: '${item.background_prompt}'.` 
           : `**BACKGROUND RULE:** Re-use the background from [Image 1].`,
       ].filter(Boolean).join(" ");
+
 
       const input_parts = [
         { inlineData: { mimeType: imageData.mimeType, data: imageData.data } },
