@@ -965,12 +965,12 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
           }
         }
         
-        // --- STEP 4: Make a SINGLE API call for the entire outfit ---
-        const response = await gemini.generateContent({
-          model: 'gemini-2.5-pro', // Highly recommend Pro for this complex task
-          contents: [{ role: 'user', parts: input_parts }],
-          responseModalities: ['IMAGE', 'TEXT'],
-        });
+         // --- STEP 4: Make a SINGLE API call for the entire outfit ---
+         const response = await gemini.generateContent({
+           model: 'gemini-2.5-flash-image',
+           contents: [{ role: 'user', parts: input_parts }],
+           responseModalities: ['IMAGE', 'TEXT'],
+         });
 
         const parsed = parseGeminiParts(response.candidates?.[0]);
         if (parsed.images?.length) {
