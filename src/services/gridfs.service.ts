@@ -1,5 +1,5 @@
 import { GridFSBucket, ObjectId } from 'mongodb';
-import { getDatabase } from './database';
+import { getDatabase } from '../config/database';
 
 let bucket: GridFSBucket;
 

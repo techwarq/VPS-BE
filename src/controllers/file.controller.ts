@@ -1,17 +1,15 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
-import { uploadFile, getFileInfo, deleteFile, listFiles } from './gridfs.service';
-import { generateSignedUrl, generateSignedUrlWithPermissions, generateUserSignedUrl } from './signed-url.service';
-import { connectToDatabase } from './database';
+import { uploadFile, getFileInfo, deleteFile, listFiles } from '../services/gridfs.service';
+import { generateSignedUrl, generateSignedUrlWithPermissions, generateUserSignedUrl } from '../services/signed-url.service';
+import { connectToDatabase } from '../config/database';
 
-// Configure multer for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 10 * 1024 * 1024, 
   },
   fileFilter: (req, file, cb) => {
-    // Allow common image types
     const allowedTypes = /jpeg|jpg|png|gif|webp|svg/;
     const extname = allowedTypes.test(file.originalname.toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -24,9 +22,6 @@ const upload = multer({
   }
 });
 
-/**
- * Upload a file and return file info with signed URL
- */
 export const uploadFileHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.file) {
@@ -40,18 +35,15 @@ export const uploadFileHandler = async (req: Request, res: Response): Promise<vo
     const { originalname, buffer, mimetype } = req.file;
     const { userId, metadata } = req.body;
 
-    // Ensure database connection is established (important for serverless environments)
     console.log('🔌 Ensuring database connection...');
     await connectToDatabase();
     console.log('✅ Database connection confirmed');
 
-    // Create a readable stream from buffer
     const { Readable } = require('stream');
     const stream = new Readable();
     stream.push(buffer);
     stream.push(null);
 
-    // Upload to GridFS
     const uploadResult = await uploadFile(stream, originalname, {
       contentType: mimetype,
       metadata: {
@@ -61,7 +53,6 @@ export const uploadFileHandler = async (req: Request, res: Response): Promise<vo
       }
     });
 
-    // Generate signed URL
     const signedUrl = generateSignedUrl(uploadResult.fileId, {
       userId,
       metadata: uploadResult
@@ -88,18 +79,13 @@ export const uploadFileHandler = async (req: Request, res: Response): Promise<vo
   }
 };
 
-/**
- * Generate a signed URL for an existing file
- */
 export const generateSignedUrlHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { fileId } = req.params;
     const { userId, permissions, expiry, metadata } = req.body;
 
-    // Ensure database connection is established
     await connectToDatabase();
 
-    // Check if file exists
     const fileInfo = await getFileInfo(fileId);
     if (!fileInfo) {
       res.status(404).json({
@@ -109,7 +95,6 @@ export const generateSignedUrlHandler = async (req: Request, res: Response): Pro
       return;
     }
 
-    // Generate signed URL based on parameters
     let signedUrl: string;
     
     if (userId) {
@@ -150,14 +135,10 @@ export const generateSignedUrlHandler = async (req: Request, res: Response): Pro
   }
 };
 
-/**
- * Get file information
- */
 export const getFileInfoHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { fileId } = req.params;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
     const fileInfo = await getFileInfo(fileId);
@@ -190,14 +171,10 @@ export const getFileInfoHandler = async (req: Request, res: Response): Promise<v
   }
 };
 
-/**
- * Delete a file
- */
 export const deleteFileHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { fileId } = req.params;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
     const success = await deleteFile(fileId);
@@ -223,14 +200,10 @@ export const deleteFileHandler = async (req: Request, res: Response): Promise<vo
   }
 };
 
-/**
- * List files with optional filtering
- */
 export const listFilesHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId, type, limit = 50, skip = 0 } = req.query;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
     let filter: any = {};
@@ -268,9 +241,6 @@ export const listFilesHandler = async (req: Request, res: Response): Promise<voi
   }
 };
 
-/**
- * Bulk delete files by IDs
- */
 export const bulkDeleteFilesHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { fileIds } = req.body;
@@ -283,7 +253,6 @@ export const bulkDeleteFilesHandler = async (req: Request, res: Response): Promi
       return;
     }
 
-    // Ensure database connection is established
     await connectToDatabase();
     
     const results = [];
@@ -330,14 +299,10 @@ export const bulkDeleteFilesHandler = async (req: Request, res: Response): Promi
   }
 };
 
-/**
- * Delete files by metadata filters
- */
 export const deleteFilesByFilterHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId, type, olderThan, limit = 100 } = req.body;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
     let filter: any = {};
@@ -352,7 +317,6 @@ export const deleteFilesByFilterHandler = async (req: Request, res: Response): P
       filter['uploadDate'] = { $lt: cutoffDate };
     }
 
-    // Get files matching the filter
     const files = await listFiles(filter);
     const filesToDelete = files.slice(0, Number(limit));
 
@@ -424,5 +388,4 @@ export const deleteFilesByFilterHandler = async (req: Request, res: Response): P
   }
 };
 
-// Export multer middleware for use in routes
 export { upload };

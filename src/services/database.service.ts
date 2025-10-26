@@ -1,5 +1,5 @@
 import { Db, ObjectId } from 'mongodb';
-import { getDatabase } from './database';
+import { getDatabase } from '../config/database';
 import { 
   ModelGeneration, 
   PoseGeneration, 
@@ -8,7 +8,7 @@ import {
   FinalPhotoGeneration, 
   PhotoshootSession,
   COLLECTIONS 
-} from './schemas';
+} from '../types/schemas';
 
 export class DatabaseService {
   private db: Db | null = null;
@@ -20,7 +20,6 @@ export class DatabaseService {
     return this.db;
   }
 
-  // Model Generation methods
   async createModelGeneration(data: Omit<ModelGeneration, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: ModelGeneration = {
@@ -44,7 +43,6 @@ export class DatabaseService {
     return await this.getDb().collection<ModelGeneration>(COLLECTIONS.MODEL_GENERATIONS).findOne({ _id: id });
   }
 
-  // Pose Generation methods
   async createPoseGeneration(data: Omit<PoseGeneration, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: PoseGeneration = {
@@ -68,7 +66,6 @@ export class DatabaseService {
     return await this.getDb().collection<PoseGeneration>(COLLECTIONS.POSE_GENERATIONS).findOne({ _id: id });
   }
 
-  // Background Generation methods
   async createBackgroundGeneration(data: Omit<BackgroundGeneration, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: BackgroundGeneration = {
@@ -92,7 +89,6 @@ export class DatabaseService {
     return await this.getDb().collection<BackgroundGeneration>(COLLECTIONS.BACKGROUND_GENERATIONS).findOne({ _id: id });
   }
 
-  // Photoshoot Generation methods
   async createPhotoshootGeneration(data: Omit<PhotoshootGeneration, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: PhotoshootGeneration = {
@@ -116,7 +112,6 @@ export class DatabaseService {
     return await this.getDb().collection<PhotoshootGeneration>(COLLECTIONS.PHOTOSHOOT_GENERATIONS).findOne({ _id: id });
   }
 
-  // Final Photo Generation methods
   async createFinalPhotoGeneration(data: Omit<FinalPhotoGeneration, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: FinalPhotoGeneration = {
@@ -140,7 +135,6 @@ export class DatabaseService {
     return await this.getDb().collection<FinalPhotoGeneration>(COLLECTIONS.FINAL_PHOTO_GENERATIONS).findOne({ _id: id });
   }
 
-  // Session methods
   async createSession(data: Omit<PhotoshootSession, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
     const now = new Date();
     const document: PhotoshootSession = {
@@ -172,7 +166,6 @@ export class DatabaseService {
       .toArray();
   }
 
-  // Utility methods
   async getGenerationStats(userId?: string): Promise<{
     totalGenerations: number;
     totalImages: number;

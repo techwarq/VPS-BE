@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
-import GeminiConnector from './gemini.connector';
-import { convertGeminiImagesToStorage, ImageStorageResult } from './image-storage.helper';
+import GeminiConnector from '../connectors/gemini.connector';
+import { convertGeminiImagesToStorage, ImageStorageResult } from '../services/image-storage.helper';
 
 interface GenerateModelsBody {
   gender: string;
@@ -11,7 +11,7 @@ interface GenerateModelsBody {
   hairStyle: string;
   hairColor: string;
   clothingStyle: string;
-  count?: number; // default 4
+  count?: number; 
   aspect_ratio?: string;
   userId?: string;
   storeInGridFS?: boolean;
@@ -20,7 +20,7 @@ interface GenerateModelsBody {
 interface GeneratePoseBody {
   prompt: string;
   count: number;
-  geminiImage?: { mimeType: string; data: string }; // base64 for gemini
+  geminiImage?: { mimeType: string; data: string }; 
   aspect_ratio?: string;
   userId?: string;
   storeInGridFS?: boolean;
@@ -33,23 +33,22 @@ interface GenerateBackgroundBody {
   lightingStyle: string;
   mood: string;
   aspect_ratio?: string;
-  count?: number; // default 1
+  count?: number; 
   userId?: string;
   storeInGridFS?: boolean;
 }
 
 interface ImageGroupItem {
   prompt: string;
-  images: Array<{ mimeType: string; data: string }>; // base64 images
+  images: Array<{ mimeType: string; data: string }>; 
 }
 
 interface MultiImageBody {
-  groups: ImageGroupItem[]; // [{ images: [], prompt }, ...]
+  groups: ImageGroupItem[]; 
   userId?: string;
   storeInGridFS?: boolean;
 }
 
-// New interfaces for avatar generation
 interface AvatarGenerateBody {
   subject?: string;
   hair_color?: string;
@@ -71,9 +70,9 @@ interface AvatarGenerateBody {
 }
 
 interface TryOnItem {
-  avatar_image: string | { mimeType: string; data: string }; // URL string or base64 object
-  garment_images: Array<string | { mimeType: string; data: string }>; // URL strings or base64 objects
-  reference_model_images?: Array<string | { mimeType: string; data: string }>; // optional reference images
+  avatar_image: string | { mimeType: string; data: string }; 
+  garment_images: Array<string | { mimeType: string; data: string }>; 
+  reference_model_images?: Array<string | { mimeType: string; data: string }>; 
 }
 
 interface TryOnRequestBody {
@@ -87,16 +86,15 @@ interface TryOnRequestBody {
 
 interface PoseRequestBody {
   items: Array<{
-    image: string;           // Main subject image URL
-    pose_reference?: string; // Pose reference image URL
+    image: string;           
+    pose_reference?: string; 
     background_prompt?: string;
     pose_prompt?: string;
   }>;
-  aspect_ratio?: string;        // Optional, defaults to "3:4"
-  negative_prompt?: string;     // Optional
+  aspect_ratio?: string;        
+  negative_prompt?: string;     
 }
 
-// New interfaces for improved functionality
 type AvatarAngle = {
     name: string;
     prompt: string;
@@ -140,7 +138,6 @@ export interface PoseResponseBody {
     results: PoseResponseItem[];
 }
 
-// AddAccessories types
 export interface AddAccessoriesItem {
     image: string;
     accessories: { url: string }[];
@@ -184,7 +181,6 @@ function parseGeminiParts(candidate: any) {
   return { text, images };
 }
 
-// Helper function to fetch image from URL and convert to base64
 async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data: string }> {
   try {
     const response = await fetch(url);
@@ -195,7 +191,6 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
     const buffer = await response.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
     
-    // Determine MIME type from response headers or URL
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     
     return {
@@ -208,16 +203,12 @@ async function fetchImageAsBase64(url: string): Promise<{ mimeType: string; data
   }
 }
 
-// Helper function to convert image input to base64 format
 async function convertImageInputToBase64(input: string | { mimeType: string; data: string } | { signedUrl: string }): Promise<{ mimeType: string; data: string }> {
   if (typeof input === 'string') {
-    // It's a URL, fetch it
     return await fetchImageAsBase64(input);
   } else if ('signedUrl' in input) {
-    // It's a signed URL object, fetch it
     return await fetchImageAsBase64(input.signedUrl);
   } else {
-    // It's already in base64 format
     return input;
   }
 }
@@ -231,12 +222,10 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
     const count = body.count ?? 4;
     const prompt = buildModelPrompt(body);
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
-    // Generate images one by one and stream results
     for (let i = 0; i < count; i++) {
       try {
         const response = await gemini.generateContent({
@@ -255,7 +244,6 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
           createdAt: new Date(),
         };
 
-        // Store images in GridFS if requested
         if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
           try {
             const storedImages = await convertGeminiImagesToStorage(parsed.images, {
@@ -281,11 +269,9 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
             result.storedInGridFS = true;
           } catch (error) {
             console.error('Error storing model images in GridFS:', error);
-            // Keep original images if storage fails
           }
         }
 
-        // Stream individual result
         res.write(JSON.stringify(result) + '\n');
       } catch (error) {
         const errorResult = {
@@ -298,7 +284,6 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
       }
     }
 
-    // End the stream
     res.end();
   } catch (error) {
     console.error('generateModels error:', error);
@@ -332,7 +317,6 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
     const geminiApiKey = ensureApiKey('GEMINI_API_KEY', process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
     const gemini = new GeminiConnector(geminiApiKey);
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -361,7 +345,6 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
           createdAt: new Date(),
         };
 
-        // Store images in GridFS if requested
         if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
           try {
             const storedImages = await convertGeminiImagesToStorage(parsed.images, {
@@ -380,7 +363,6 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
             result.storedInGridFS = true;
           } catch (error) {
             console.error('Error storing pose images in GridFS:', error);
-            // Keep original images if storage fails
           }
         }
 
@@ -430,7 +412,6 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
       `8k ultra-detailed photography.`
     );
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -453,7 +434,6 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
           createdAt: new Date(),
         };
 
-        // Store images in GridFS if requested
         if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
           try {
             const storedImages = await convertGeminiImagesToStorage(parsed.images, {
@@ -476,7 +456,6 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
             result.storedInGridFS = true;
           } catch (error) {
             console.error('Error storing background images in GridFS:', error);
-            // Keep original images if storage fails
           }
         }
 
@@ -519,7 +498,6 @@ export const generatePhotoshoot = async (req: Request, res: Response): Promise<v
     const geminiApiKey = ensureApiKey('GEMINI_API_KEY', process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
     const gemini = new GeminiConnector(geminiApiKey);
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -583,7 +561,6 @@ export const generateFinalPhoto = async (req: Request, res: Response): Promise<v
     const geminiApiKey = ensureApiKey('GEMINI_API_KEY', process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
     const gemini = new GeminiConnector(geminiApiKey);
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -637,13 +614,11 @@ export const generateFinalPhoto = async (req: Request, res: Response): Promise<v
   }
 };
 
-// New avatar generation endpoint with streaming
 export const generateAvatar = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as AvatarGenerateBody;
     const geminiApiKey = ensureApiKey('GEMINI_API_KEY', process.env.GEMINI_API_KEY);
     
-    // Build subject description
     const framingNorm = String(
       (body.framing || body.body_scope || body.bodyScope || "headshot")
     ).toLowerCase().replace(/_/g, "-");
@@ -675,7 +650,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
 
     const subject = body.subject || `${baseDescription}${features}${clothingDesc}.`;
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -727,7 +701,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       "Produce the JSON plan now.",
     ].filter(Boolean).join("\n");
 
-    // Generate the plan
     const planResponse = await gemini.generateContent({
       model: 'gemini-2.5-pro',
       contents: [{ role: 'user', parts: [{ text: `${geminiSystemPrompt}\n\n${geminiUserPrompt}` }] }],
@@ -750,7 +723,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    // Generate first image (front angle)
     const firstPrompt = plan.angles[0].prompt;
     const firstResponse = await gemini.generateContent({
       model: 'gemini-2.5-flash-image',
@@ -771,7 +743,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       text: firstParsed.text,
     };
 
-    // Store first image in GridFS if requested
     if (body.storeInGridFS && firstParsed.images && firstParsed.images.length > 0) {
       try {
         const storedImages = await convertGeminiImagesToStorage(firstParsed.images, {
@@ -793,17 +764,13 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
         firstResult.storedInGridFS = true;
       } catch (error) {
         console.error('Error storing first avatar image in GridFS:', error);
-        // Keep original images if storage fails
       }
     }
 
-    // Stream the first result
     res.write(JSON.stringify(firstResult) + '\n');
 
-    // Use first image as reference for subsequent generations
     const firstReferenceImage = firstParsed.images[0];
 
-    // Generate remaining angles
     for (let i = 1; i < plan.angles.length; i++) {
       const angle = plan.angles[i];
       
@@ -829,7 +796,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
           text: parsed.text,
         };
 
-        // Store remaining images in GridFS if requested
         if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
           try {
             const storedImages = await convertGeminiImagesToStorage(parsed.images, {
@@ -851,11 +817,9 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
             result.storedInGridFS = true;
           } catch (error) {
             console.error('Error storing avatar image in GridFS:', error);
-            // Keep original images if storage fails
           }
         }
 
-        // Stream each result as it's generated
         res.write(JSON.stringify(result) + '\n');
       } catch (error) {
         const errorResult = {
@@ -866,7 +830,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
       }
     }
 
-    // End the stream
     res.end();
 
   } catch (error) {
@@ -885,7 +848,6 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// Try-on endpoint with streaming for multi-garment outfits
 export const tryOn = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as TryOnRequestBody;
@@ -895,7 +857,6 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -906,7 +867,6 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
     const styleLine = body.style ? `The overall style should be: ${body.style}.` : "The style should be photorealistic.";
     const negLine = body.negative_prompt ? `Avoid the following: ${body.negative_prompt}.` : "";
 
-    // Loop through each OUTFIT request in the 'items' array
     for (let idx = 0; idx < body.items.length; idx++) {
       const item = body.items[idx];
       const avatarInput = item.avatar_image;
@@ -922,14 +882,12 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
       }
 
       try {
-        // --- STEP 1: Process all images for the outfit in parallel ---
         const avatar = await convertImageInputToBase64(avatarInput);
         
         const garments = await Promise.all(
           garmentInputs.map(gInput => convertImageInputToBase64(gInput))
         );
 
-        // --- STEP 2: Create the new multi-garment prompt ---
         const garmentCount = garments.length;
         const prompt = [
           "You are an expert virtual stylist creating a professional e-commerce fashion photo from multiple inputs.",
@@ -946,14 +904,12 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
           negLine
         ].filter(Boolean).join(" ");
 
-        // --- STEP 3: Assemble the API request with all images ---
         const input_parts = [
           { inlineData: avatar },
-          ...garments.map(g => ({ inlineData: g })), // Spread all garment images
+          ...garments.map(g => ({ inlineData: g })), 
           { text: prompt }
         ];
         
-        // (Optional) Add reference model images if provided
         if (item.reference_model_images) {
            for (const refImgInput of item.reference_model_images) {
             try {
@@ -965,7 +921,6 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
           }
         }
         
-         // --- STEP 4: Make a SINGLE API call for the entire outfit ---
          const response = await gemini.generateContent({
            model: 'gemini-2.5-flash-image',
            contents: [{ role: 'user', parts: input_parts }],
@@ -998,7 +953,7 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
           error: genErr?.message || 'Unknown error during outfit generation' 
         };
         res.write(JSON.stringify(errorResult) + '\n');
-        continue; // Move to the next item in the request
+        continue; 
       }
     }
 
@@ -1014,7 +969,6 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// Pose transfer endpoint with streaming
 export const generatePoseTransfer = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as PoseRequestBody;
@@ -1024,7 +978,6 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
       return;
     }
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1042,7 +995,6 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
         continue;
       }
 
-      // Convert image URL to base64 format
       let imageData: { mimeType: string; data: string };
       try {
         imageData = await fetchImageAsBase64(item.image);
@@ -1055,14 +1007,12 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
         continue;
       }
 
-      // Convert pose reference URL to base64 format if it exists
       let poseRefData: { mimeType: string; data: string } | undefined;
       if (item.pose_reference) {
         try {
           poseRefData = await fetchImageAsBase64(item.pose_reference);
         } catch (error) {
           console.warn(`Failed to process pose reference for item ${i}:`, error);
-          // Continue without pose reference rather than failing completely
         }
       }
 
@@ -1070,13 +1020,11 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
       const hasPosePrompt = !!item.pose_prompt && item.pose_prompt.trim().length > 0;
       const mode = hasPoseRef && hasPosePrompt ? "pose_both" : hasPoseRef ? "pose_reference" : "pose_prompt";
 
-      // --- START: POSE PURIFICATION HACK ---
       console.log(`Starting Pose Purification for item ${i}`);
 
-      // STEP 1: Create a "clean" pose reference image.
       const purificationPrompt = "Analyze the input image. Identify the exact pose of the person. Create a new image of a featureless, gender-neutral, gray mannequin in that exact same pose. The background must be solid black. Preserve the pose with perfect accuracy. Discard all clothing, facial features, and original background.";
       
-      let purifiedPoseRef = poseRefData; // Fallback to original if purification fails
+      let purifiedPoseRef = poseRefData; 
       if (poseRefData) {
         try {
           const purifiedResponse = await gemini.generateContent({
@@ -1103,7 +1051,6 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
           console.warn("Falling back to original pose reference.");
         }
       }
-      // --- END: POSE PURIFICATION HACK ---
 
       const basePrompt = [
         "**Objective: Precise Pose Transfer.**",
@@ -1153,7 +1100,6 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
             pose_prompt: item.pose_prompt || undefined,
           };
 
-          // Store images in GridFS and return signed URLs
           try {
             const storedImages = await convertGeminiImagesToStorage(parsed.images, {
               filenamePrefix: `pose-transfer-item-${i}`,
@@ -1173,10 +1119,8 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
             result.storedInGridFS = true;
           } catch (error) {
             console.error('Error storing pose transfer images in GridFS:', error);
-            // Keep original images if storage fails
           }
           
-          // Stream the result
           res.write(JSON.stringify(result) + '\n');
         } else {
           const errorResult = { 
@@ -1208,7 +1152,6 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
   }
 };
 
-// Add accessories endpoint with streaming
 export const addAccessories = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as AddAccessoriesRequestBody;
@@ -1221,7 +1164,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
     const geminiApiKey = ensureApiKey('GEMINI_API_KEY', process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY);
     const gemini = new GeminiConnector(geminiApiKey);
 
-    // Set headers for streaming
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1236,7 +1178,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
         continue;
       }
 
-      // Improved System Prompt for the Planner
       const systemPromptForPlanner = [
         "You are a world-class creative director for a high-fashion magazine.",
         "Your task is to analyze a main subject image and a set of accessory images (like sunglasses, watches, bags) and then create a 5-shot photoshoot plan.",
@@ -1269,7 +1210,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
         body.prompt ? `Incorporate these user hints: ${body.prompt}` : "",
       ].filter(Boolean).join("\n");
 
-      // Convert image URLs to base64 format
       let mainImageData: { mimeType: string; data: string };
       try {
         mainImageData = await fetchImageAsBase64(image);
@@ -1282,7 +1222,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
         continue;
       }
 
-      // Convert accessory images to base64 format
       const accessoryImagesData: Array<{ mimeType: string; data: string }> = [];
       for (const acc of accessories) {
         try {
@@ -1290,7 +1229,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
           accessoryImagesData.push(accImageData);
         } catch (error) {
           console.warn(`Failed to process accessory image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-          // Continue without this accessory rather than failing completely
         }
       }
 
@@ -1338,10 +1276,9 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
       const finalAspect = body.aspect_ratio || plan.aspect_ratio || "3:4";
       const finalNegative = plan.negative_prompt || "blurry, low quality, cartoon";
 
-      // Send ALL Images (Avatar + Accessories) to the Generator
       const imageGeneratorInputFiles = [
-        { inlineData: mainImageData }, // The main avatar
-        ...accessoryImagesData.map(accData => ({ inlineData: accData })) // The accessories
+        { inlineData: mainImageData }, 
+        ...accessoryImagesData.map(accData => ({ inlineData: accData })) 
       ];
 
       for (const shot of plan.shots) {
@@ -1368,7 +1305,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
               text: parsed.text
             };
 
-            // Store images in GridFS and return signed URLs
             try {
               const storedImages = await convertGeminiImagesToStorage(parsed.images, {
                 filenamePrefix: `accessories-item-${i}-${shot.name}`,
@@ -1387,7 +1323,6 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
               result.storedInGridFS = true;
             } catch (error) {
               console.error('Error storing accessories images in GridFS:', error);
-              // Keep original images if storage fails
             }
 
             res.write(JSON.stringify(result) + '\n');

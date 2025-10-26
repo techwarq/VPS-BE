@@ -10,9 +10,6 @@ export interface ImageStorageResult {
   signedUrl: string;
 }
 
-/**
- * Convert base64 image data to GridFS storage and return signed URL
- */
 export async function storeBase64Image(
   base64Data: string,
   mimeType: string,
@@ -24,25 +21,20 @@ export async function storeBase64Image(
   }
 ): Promise<ImageStorageResult> {
   try {
-    // Remove data URL prefix if present
     const base64String = base64Data.replace(/^data:[^;]+;base64,/, '');
     
-    // Convert base64 to buffer
     const buffer = Buffer.from(base64String, 'base64');
     
-    // Create readable stream from buffer
     const stream = new Readable();
     stream.push(buffer);
     stream.push(null);
     
-    // Generate filename if not provided
     const extension = getExtensionFromMimeType(mimeType);
     const timestamp = Date.now();
     const filename = options?.filename || `generated-image-${timestamp}.${extension}`;
     
     console.log('📤 About to upload file:', filename);
     
-    // Upload to GridFS
     const uploadResult = await uploadFile(stream, filename, {
       contentType: mimeType,
       metadata: {
@@ -56,10 +48,9 @@ export async function storeBase64Image(
     console.log('✅ Upload successful! File ID:', uploadResult.fileId);
     console.log('📋 Full upload result:', uploadResult);
     
-    // Generate signed URL
     const signedUrl = generateSignedUrl(uploadResult.fileId, {
       userId: options?.userId,
-      expiry: options?.expiry || '24h', // Default 24 hours for generated images
+      expiry: options?.expiry || '24h', 
       metadata: {
         ...uploadResult,
         generated: true
@@ -82,9 +73,6 @@ export async function storeBase64Image(
   }
 }
 
-/**
- * Store multiple base64 images and return signed URLs
- */
 export async function storeMultipleBase64Images(
   images: Array<{ mimeType: string; data: string }>,
   options?: {
@@ -113,16 +101,12 @@ export async function storeMultipleBase64Images(
       results.push(result);
     } catch (error) {
       console.error(`Error storing image ${i + 1}:`, error);
-      // Continue with other images even if one fails
     }
   }
   
   return results;
 }
 
-/**
- * Get file extension from MIME type
- */
 function getExtensionFromMimeType(mimeType: string): string {
   const map: Record<string, string> = {
     'image/png': 'png',
@@ -135,9 +119,6 @@ function getExtensionFromMimeType(mimeType: string): string {
   return map[mimeType] || 'jpg';
 }
 
-/**
- * Convert Gemini image response to storage format
- */
 export function convertGeminiImagesToStorage(
   geminiImages: Array<{ mimeType: string; data: string }>,
   options?: {

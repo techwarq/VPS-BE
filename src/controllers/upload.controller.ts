@@ -1,18 +1,16 @@
 import { Request, Response } from 'express';
 import { Readable } from 'stream';
-import { uploadFile } from './gridfs.service';
-import { generateSignedUrl } from './signed-url.service';
-import { connectToDatabase } from './database';
+import { uploadFile } from '../services/gridfs.service';
+import { generateSignedUrl } from '../services/signed-url.service';
+import { connectToDatabase } from '../config/database';
 import multer from 'multer';
 
-// Configure multer for memory storage
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: 50 * 1024 * 1024, 
   },
   fileFilter: (req, file, cb) => {
-    // Allow all image types
     const allowedTypes = /jpeg|jpg|png|gif|webp|svg|bmp/;
     const extname = allowedTypes.test(file.originalname.toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -25,9 +23,6 @@ const upload = multer({
   }
 });
 
-/**
- * Simple upload endpoint that returns a signed URL
- */
 export const simpleUploadHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     if (!req.file) {
@@ -51,17 +46,14 @@ export const simpleUploadHandler = async (req: Request, res: Response): Promise<
       userId: userId
     });
 
-    // Ensure database connection is established (important for serverless environments)
     console.log('🔌 Ensuring database connection...');
     await connectToDatabase();
     console.log('✅ Database connection confirmed');
 
-    // Create a readable stream from buffer
     const stream = new Readable();
     stream.push(buffer);
     stream.push(null);
 
-    // Upload to GridFS
     const uploadResult = await uploadFile(stream, originalname, {
       contentType: mimetype,
       metadata: {
@@ -74,7 +66,6 @@ export const simpleUploadHandler = async (req: Request, res: Response): Promise<
 
     console.log('✅ File uploaded successfully:', uploadResult.fileId);
 
-    // Generate signed URL
     const signedUrl = generateSignedUrl(uploadResult.fileId, {
       userId,
       metadata: uploadResult,
@@ -106,5 +97,4 @@ export const simpleUploadHandler = async (req: Request, res: Response): Promise<
   }
 };
 
-// Export multer middleware
 export { upload };

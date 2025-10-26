@@ -14,7 +14,6 @@ async function main() {
   });
   console.log(response.text);
 
-  // For verification, you can inspect the metadata to see which URLs the model retrieved
   console.log(response.candidates?.[0]?.urlContextMetadata)
 }
 

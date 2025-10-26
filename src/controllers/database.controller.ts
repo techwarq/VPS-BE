@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
 import { ObjectId } from 'mongodb';
-import { DatabaseService } from './database.service';
+import { DatabaseService } from '../services/database.service';
 
-// Get generation by ID
 export const getGeneration = async (req: Request, res: Response): Promise<void> => {
   try {
     const { type, id } = req.params;
@@ -52,7 +51,6 @@ export const getGeneration = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// Get user statistics
 export const getUserStats = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
@@ -74,7 +72,6 @@ export const getUserStats = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-// Get global statistics
 export const getGlobalStats = async (req: Request, res: Response): Promise<void> => {
   try {
     const dbService = new DatabaseService();
@@ -89,7 +86,6 @@ export const getGlobalStats = async (req: Request, res: Response): Promise<void>
   }
 };
 
-// Get user sessions
 export const getUserSessions = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId } = req.params;
@@ -112,7 +108,6 @@ export const getUserSessions = async (req: Request, res: Response): Promise<void
   }
 };
 
-// Create a new session
 export const createSession = async (req: Request, res: Response): Promise<void> => {
   try {
     const { userId, sessionName, description } = req.body;
@@ -144,7 +139,6 @@ export const createSession = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-// Get session by ID
 export const getSession = async (req: Request, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;

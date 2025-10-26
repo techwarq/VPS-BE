@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import * as fs from 'node:fs';
-import { convertGeminiImagesToStorage, ImageStorageResult } from './image-storage.helper';
+import { convertGeminiImagesToStorage, ImageStorageResult } from '../services/image-storage.helper';
 
 type GeminiModality = 'TEXT' | 'IMAGE';
 
@@ -131,7 +131,6 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
       }
     }
 
-    // Store images in GridFS if requested
     if (body.storeImagesInGridFS && images.length > 0) {
       try {
         storedImages = await convertGeminiImagesToStorage(images, {
@@ -147,7 +146,6 @@ export const geminiGenerate = async (req: Request, res: Response): Promise<void>
         });
       } catch (error) {
         console.error('Error storing images in GridFS:', error);
-        // Continue with response even if storage fails
       }
     }
 
@@ -229,7 +227,6 @@ export const geminiGenerateStream = async (req: Request, res: Response): Promise
       }
     }
 
-    // Store images in GridFS if requested
     if (body.storeImagesInGridFS && images.length > 0) {
       try {
         storedImages = await convertGeminiImagesToStorage(images, {
@@ -246,7 +243,6 @@ export const geminiGenerateStream = async (req: Request, res: Response): Promise
         });
       } catch (error) {
         console.error('Error storing streamed images in GridFS:', error);
-        // Continue with response even if storage fails
       }
     }
 

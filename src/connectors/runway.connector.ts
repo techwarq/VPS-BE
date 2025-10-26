@@ -93,7 +93,6 @@ class RunwayConnector {
   }
 }
 
-// Express route handlers
 export const runwayImageGeneration = async (req: Request, res: Response): Promise<void> => {
   try {
     const apiKey = process.env.RUNWAY_API_KEY;
@@ -107,7 +106,6 @@ export const runwayImageGeneration = async (req: Request, res: Response): Promis
     const connector = new RunwayConnector(apiKey);
     const { promptText, ratio, model, seed, referenceImages, contentModeration } = req.body;
 
-    // Validate required fields
     if (!promptText || !ratio || !model) {
       res.status(400).json({
         error: 'Missing required fields: promptText, ratio, and model are required'
@@ -115,7 +113,6 @@ export const runwayImageGeneration = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Validate model
     if (!['gen4_image', 'gen4_image_turbo'].includes(model)) {
       res.status(400).json({
         error: 'Invalid model. Must be either "gen4_image" or "gen4_image_turbo"'
@@ -123,7 +120,6 @@ export const runwayImageGeneration = async (req: Request, res: Response): Promis
       return;
     }
 
-    // Validate ratio for gen4_image
     const validRatios = [
       '1920:1080', '1080:1920', '1024:1024', '1360:768', '1080:1080',
       '1168:880', '1440:1080', '1080:1440', '1808:768', '2112:912',

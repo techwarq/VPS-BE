@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import { Request, Response } from 'express';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
-const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; // 5 minutes default
+const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; 
 const BASE_URL = process.env.BASE_URL || 'https://vps-be.vercel.app';
 
 export interface SignedUrlPayload {
@@ -18,9 +18,6 @@ export interface TokenValidationResult {
   error?: string;
 }
 
-/**
- * Generate a signed URL for a file
- */
 export function generateSignedUrl(
   fileId: string,
   options?: {
@@ -44,9 +41,6 @@ export function generateSignedUrl(
   return `${BASE_URL}/api/files/${fileId}?token=${token}`;
 }
 
-/**
- * Validate a JWT token and extract payload
- */
 export function validateToken(token: string): TokenValidationResult {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as SignedUrlPayload;
@@ -70,9 +64,6 @@ export function validateToken(token: string): TokenValidationResult {
   }
 }
 
-/**
- * Middleware to validate file access token
- */
 export function validateFileAccess(req: Request, res: Response, next: any): void {
   console.log('🔍 validateFileAccess: MIDDLEWARE CALLED');
   const { token } = req.query;
@@ -97,7 +88,6 @@ export function validateFileAccess(req: Request, res: Response, next: any): void
     return;
   }
 
-  // Check for fileId in multiple locations (flexible parameter naming)
   const requestedFileId = req.params.id || req.params.fileId;
   
   console.log('🔍 Requested file ID:', requestedFileId);
@@ -119,15 +109,11 @@ export function validateFileAccess(req: Request, res: Response, next: any): void
     return;
   }
 
-  // Add the validated payload to the request object
   req.fileAccess = validation.payload;
   console.log('🔍 validateFileAccess: About to call next(), params:', req.params);
   next();
 }
 
-/**
- * Generate a signed URL with custom permissions
- */
 export function generateSignedUrlWithPermissions(
   fileId: string,
   permissions: string[],
@@ -143,9 +129,6 @@ export function generateSignedUrlWithPermissions(
   });
 }
 
-/**
- * Generate a signed URL for a specific user
- */
 export function generateUserSignedUrl(
   fileId: string,
   userId: string,
@@ -161,7 +144,6 @@ export function generateUserSignedUrl(
   });
 }
 
-// Extend Express Request interface to include fileAccess
 declare global {
   namespace Express {
     interface Request {

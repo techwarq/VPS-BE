@@ -9,7 +9,7 @@ interface FluxCreateRequestBody {
   output_format?: 'jpeg' | 'png';
   webhook_url?: string | null;
   webhook_secret?: string | null;
-  input_image?: string; // base64 for editing
+  input_image?: string; 
 }
 
 interface FluxCreateResponse {
@@ -34,7 +34,6 @@ class FluxConnector {
   }
 
   async createRequest(body: FluxCreateRequestBody): Promise<FluxCreateResponse> {
-    // Always keep seed random by omitting it from the payload
     const { seed: _omitSeed, ...rest } = body;
     const response = await fetch(this.baseUrl, {
       method: 'POST',

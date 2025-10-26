@@ -1,29 +1,22 @@
 import { Request, Response } from 'express';
-import { downloadFile, getFileInfo } from './gridfs.service';
-import { validateFileAccess } from './signed-url.service';
-import { connectToDatabase } from './database';
+import { downloadFile, getFileInfo } from '../services/gridfs.service';
+import { validateFileAccess } from '../services/signed-url.service';
+import { connectToDatabase } from '../config/database';
 
-/**
- * Stream a file with token validation
- * This is the main endpoint that serves files with signed URLs
- */
 export const streamFileHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: fileId } = req.params;
     console.log('🔍 StreamFileHandler: Looking for file ID:', fileId);
     console.log('🔍 StreamFileHandler: req.params:', req.params);
     
-    // Ensure database connection is established
     await connectToDatabase();
     
-    // Get file information first
     const fileInfo = await getFileInfo(fileId);
     console.log('📄 StreamFileHandler: File info result:', fileInfo ? 'FOUND' : 'NOT FOUND');
     
     if (!fileInfo) {
       console.log('❌ StreamFileHandler: File not found for ID:', fileId);
       
-      // List all files to help debug
       try {
         const { listFiles } = require('./gridfs.service');
         const allFiles = await listFiles();
@@ -50,19 +43,16 @@ export const streamFileHandler = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Set appropriate headers
     res.set({
       'Content-Type': fileInfo.contentType || 'application/octet-stream',
       'Content-Length': fileInfo.length,
       'Content-Disposition': `inline; filename="${fileInfo.filename}"`,
-      'Cache-Control': 'private, max-age=300', // 5 minutes cache
+      'Cache-Control': 'private, max-age=300', 
       'ETag': `"${fileInfo._id}"`
     });
 
-    // Create download stream
     const downloadStream = await downloadFile(fileId);
     
-    // Handle stream errors
     downloadStream.on('error', (error) => {
       console.error('Stream error:', error);
       if (!res.headersSent) {
@@ -73,10 +63,8 @@ export const streamFileHandler = async (req: Request, res: Response): Promise<vo
       }
     });
 
-    // Pipe the stream to response
     downloadStream.pipe(res);
 
-    // Log successful access
     console.log(`📁 File served: ${fileInfo.filename} (${fileInfo._id}) to user: ${req.fileAccess?.userId || 'anonymous'}`);
 
   } catch (error) {
@@ -90,17 +78,12 @@ export const streamFileHandler = async (req: Request, res: Response): Promise<vo
   }
 };
 
-/**
- * Download a file (forces download instead of inline display)
- */
 export const downloadFileHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: fileId } = req.params;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
-    // Get file information first
     const fileInfo = await getFileInfo(fileId);
     if (!fileInfo) {
       res.status(404).json({
@@ -110,7 +93,6 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
       return;
     }
 
-    // Set headers for download
     res.set({
       'Content-Type': 'application/octet-stream',
       'Content-Length': fileInfo.length,
@@ -119,10 +101,8 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
       'ETag': `"${fileInfo._id}"`
     });
 
-    // Create download stream
     const downloadStream = await downloadFile(fileId);
     
-    // Handle stream errors
     downloadStream.on('error', (error) => {
       console.error('Download stream error:', error);
       if (!res.headersSent) {
@@ -133,10 +113,8 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
       }
     });
 
-    // Pipe the stream to response
     downloadStream.pipe(res);
 
-    // Log successful download
     console.log(`⬇️ File downloaded: ${fileInfo.filename} (${fileInfo._id}) by user: ${req.fileAccess?.userId || 'anonymous'}`);
 
   } catch (error) {
@@ -150,14 +128,10 @@ export const downloadFileHandler = async (req: Request, res: Response): Promise<
   }
 };
 
-/**
- * Get file metadata without downloading the file
- */
 export const getFileMetadataHandler = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id: fileId } = req.params;
     
-    // Ensure database connection is established
     await connectToDatabase();
     
     const fileInfo = await getFileInfo(fileId);
@@ -178,7 +152,6 @@ export const getFileMetadataHandler = async (req: Request, res: Response): Promi
         contentType: fileInfo.contentType,
         uploadDate: fileInfo.uploadDate,
         metadata: fileInfo.metadata,
-        // Don't include the actual file data
         hasFile: true
       }
     });
@@ -192,16 +165,11 @@ export const getFileMetadataHandler = async (req: Request, res: Response): Promi
   }
 };
 
-/**
- * Health check for file service
- */
 export const fileServiceHealthHandler = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Try to access GridFS bucket
     const { getGridFSBucket } = require('./gridfs.service');
     const bucket = getGridFSBucket();
     
-    // Simple health check - try to list files with limit 1
     await bucket.find({}).limit(1).toArray();
     
     res.json({

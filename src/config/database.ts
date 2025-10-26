@@ -16,7 +16,7 @@ export async function connectToDatabase(): Promise<Db> {
   try {
     client = new MongoClient(uri);
     await client.connect();
-    db = client.db(); // Use default database or specify database name
+    db = client.db();
     console.log('✅ Connected to MongoDB');
     return db;
   } catch (error) {
@@ -40,5 +40,3 @@ export function getDatabase(): Db {
   console.log('✅ Database connection retrieved successfully');
   return db;
 }
-
-

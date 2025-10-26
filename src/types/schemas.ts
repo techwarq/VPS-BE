@@ -1,13 +1,11 @@
 import { ObjectId } from 'mongodb';
 
-// Base interface for all documents
 export interface BaseDocument {
   _id?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Model generation schema
 export interface ModelGeneration extends BaseDocument {
   userId?: string;
   sessionId?: string;
@@ -38,7 +36,6 @@ export interface ModelGeneration extends BaseDocument {
   error?: string;
 }
 
-// Pose generation schema
 export interface PoseGeneration extends BaseDocument {
   userId?: string;
   sessionId?: string;
@@ -66,7 +63,6 @@ export interface PoseGeneration extends BaseDocument {
   error?: string;
 }
 
-// Background generation schema
 export interface BackgroundGeneration extends BaseDocument {
   userId?: string;
   sessionId?: string;
@@ -93,7 +89,6 @@ export interface BackgroundGeneration extends BaseDocument {
   error?: string;
 }
 
-// Photoshoot generation schema
 export interface PhotoshootGeneration extends BaseDocument {
   userId?: string;
   sessionId?: string;
@@ -113,7 +108,6 @@ export interface PhotoshootGeneration extends BaseDocument {
   error?: string;
 }
 
-// Final photo generation schema
 export interface FinalPhotoGeneration extends BaseDocument {
   userId?: string;
   sessionId?: string;
@@ -133,7 +127,6 @@ export interface FinalPhotoGeneration extends BaseDocument {
   error?: string;
 }
 
-// Session schema to group related generations
 export interface PhotoshootSession extends BaseDocument {
   userId?: string;
   sessionName?: string;
@@ -151,7 +144,6 @@ export interface PhotoshootSession extends BaseDocument {
   };
 }
 
-// User schema (optional, for future user management)
 export interface User extends BaseDocument {
   email: string;
   name?: string;
@@ -167,7 +159,6 @@ export interface User extends BaseDocument {
   };
 }
 
-// Collection names
 export const COLLECTIONS = {
   MODEL_GENERATIONS: 'modelGenerations',
   POSE_GENERATIONS: 'poseGenerations',
@@ -177,4 +168,3 @@ export const COLLECTIONS = {
   PHOTOSHOOT_SESSIONS: 'photoshootSessions',
   USERS: 'users',
 } as const;
-

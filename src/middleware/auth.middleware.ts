@@ -10,7 +10,6 @@ export interface AuthUser {
   permissions?: string[];
 }
 
-// Extend Express Request interface to include user
 declare global {
   namespace Express {
     interface Request {
@@ -19,21 +18,15 @@ declare global {
   }
 }
 
-/**
- * Optional authentication middleware
- * This middleware checks for an Authorization header but doesn't require it
- * If a valid token is provided, it adds user info to the request
- */
 export const optionalAuth = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // No token provided, continue without authentication
     next();
     return;
   }
 
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  const token = authHeader.substring(7); 
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
@@ -45,16 +38,11 @@ export const optionalAuth = (req: Request, res: Response, next: NextFunction): v
     };
     next();
   } catch (error) {
-    // Invalid token, but we continue without authentication since it's optional
     console.warn('Invalid token in optional auth:', error);
     next();
   }
 };
 
-/**
- * Required authentication middleware
- * This middleware requires a valid Authorization header
- */
 export const requireAuth = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers.authorization;
   
@@ -66,7 +54,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
     return;
   }
 
-  const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+  const token = authHeader.substring(7); 
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
@@ -85,9 +73,6 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction): vo
   }
 };
 
-/**
- * Role-based authorization middleware
- */
 export const requireRole = (roles: string | string[]) => {
   const allowedRoles = Array.isArray(roles) ? roles : [roles];
   
@@ -112,9 +97,6 @@ export const requireRole = (roles: string | string[]) => {
   };
 };
 
-/**
- * Permission-based authorization middleware
- */
 export const requirePermission = (permissions: string | string[]) => {
   const requiredPermissions = Array.isArray(permissions) ? permissions : [permissions];
   
@@ -144,9 +126,6 @@ export const requirePermission = (permissions: string | string[]) => {
   };
 };
 
-/**
- * Generate a JWT token for a user
- */
 export function generateAuthToken(user: AuthUser, expiresIn: string = '24h'): string {
   return jwt.sign(
     {
@@ -160,9 +139,6 @@ export function generateAuthToken(user: AuthUser, expiresIn: string = '24h'): st
   );
 }
 
-/**
- * Verify a JWT token and return user info
- */
 export function verifyAuthToken(token: string): AuthUser | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
