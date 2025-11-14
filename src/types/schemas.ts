@@ -147,6 +147,12 @@ export interface PhotoshootSession extends BaseDocument {
 export interface User extends BaseDocument {
   email: string;
   name?: string;
+  password?: string; // Hashed password for username/password auth
+  googleId?: string; // Google OAuth ID
+  profilePicture?: string;
+  authProvider: 'local' | 'google' | 'both'; // Track how user signed up
+  emailVerified: boolean;
+  lastLogin?: Date;
   preferences?: {
     defaultAspectRatio?: string;
     defaultModel?: string;

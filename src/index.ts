@@ -20,7 +20,8 @@ import {
   generateAvatar,
   addAccessories,
   tryOn,
-  generatePoseTransfer
+  generatePoseTransfer,
+  chatQuery
 } from './controllers/photoshoot.controller';
 import {
   getGeneration,
@@ -46,6 +47,15 @@ import {
   getFileMetadataHandler,
   fileServiceHealthHandler
 } from './controllers/file-stream.controller';
+import {
+  registerWithPassword,
+  loginWithPassword,
+  loginWithGoogle,
+  getCurrentUser,
+  updateUserProfile,
+  changePassword,
+  deleteAccount
+} from './controllers/auth.controller';
 import { validateFileAccess } from './services/signed-url.service';
 import { optionalAuth, requireAuth } from './middleware/auth.middleware';
 import { simpleUploadHandler, upload as simpleUpload } from './controllers/upload.controller';
@@ -129,51 +139,62 @@ app.post('/api/gemini/compare', geminiRoute);
 app.post('/api/gemini/generate', geminiGenerate);
 app.post('/api/gemini/generate-stream', geminiGenerateStream);
 
+// Authentication routes
+app.post('/api/auth/register', registerWithPassword);
+app.post('/api/auth/login', loginWithPassword);
+app.post('/api/auth/google', loginWithGoogle);
+app.get('/api/auth/me', requireAuth, getCurrentUser);
+app.put('/api/auth/profile', requireAuth, updateUserProfile);
+app.put('/api/auth/password', requireAuth, changePassword);
+app.delete('/api/auth/account', requireAuth, deleteAccount);
+
 app.post('/api/runway/generate-image', runwayImageGeneration);
 app.get('/api/runway/task/:taskId', runwayTaskStatus);
 app.delete('/api/runway/task/:taskId', runwayCancelTask);
 app.get('/api/runway/organization', runwayOrganizationInfo);
 
-app.post('/api/flux/create', fluxCreate);
-app.get('/api/flux/poll', fluxPoll);
+app.post('/api/flux/create', optionalAuth, fluxCreate);
+app.get('/api/flux/poll', optionalAuth, fluxPoll);
 
-app.post('/api/photoshoot/models', generateModels);
-app.post('/api/photoshoot/pose', generatePose);
-app.post('/api/photoshoot/background', generateBackground);
-app.post('/api/photoshoot/shoot', generatePhotoshoot);
-app.post('/api/photoshoot/final', generateFinalPhoto);
+// Photoshoot routes - all with optional authentication to auto-inject userId
+app.post('/api/photoshoot/models', optionalAuth, generateModels);
+app.post('/api/photoshoot/pose', optionalAuth, generatePose);
+app.post('/api/photoshoot/background', optionalAuth, generateBackground);
+app.post('/api/photoshoot/shoot', optionalAuth, generatePhotoshoot);
+app.post('/api/photoshoot/final', optionalAuth, generateFinalPhoto);
+app.post('/api/photoshoot/chat', requireAuth, chatQuery);
 
-app.post('/api/photoshoot/avatar', (req: Request, res: Response): void => {
+app.post('/api/photoshoot/avatar', optionalAuth, (req: Request, res: Response): void => {
   console.log('🎯 Avatar generation endpoint hit');
+  console.log('👤 User:', req.user?.userId || 'anonymous');
   console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('🌐 Request headers:', req.headers);
   console.log('⏰ Timestamp:', new Date().toISOString());
   
   generateAvatar(req, res);
 });
 
-app.post('/api/photoshoot/add-accessories', (req: Request, res: Response): void => {
+app.post('/api/photoshoot/add-accessories', optionalAuth, (req: Request, res: Response): void => {
   console.log('🎯 Add accessories endpoint hit');
+  console.log('👤 User:', req.user?.userId || 'anonymous');
   console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('🌐 Request headers:', req.headers);
   console.log('⏰ Timestamp:', new Date().toISOString());
   
   addAccessories(req, res);
 });
 
-app.post('/api/photoshoot/tryon', (req: Request, res: Response): void => {
+app.post('/api/photoshoot/tryon', optionalAuth, (req: Request, res: Response): void => {
   console.log('🎯 Try-on endpoint hit');
+  console.log('👤 User:', req.user?.userId || 'anonymous');
   console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('🌐 Request headers:', req.headers);
   console.log('⏰ Timestamp:', new Date().toISOString());
   
   tryOn(req, res);
 });
 
-app.post('/api/photoshoot/pose-transfer', (req: Request, res: Response): void => {
+app.post('/api/photoshoot/pose-transfer', optionalAuth, (req: Request, res: Response): void => {
   console.log('🎯 Pose transfer endpoint hit');
+  console.log('👤 User:', req.user?.userId || 'anonymous');
   console.log('📝 Request body:', JSON.stringify(req.body, null, 2));
-  console.log('🌐 Request headers:', req.headers);
   console.log('⏰ Timestamp:', new Date().toISOString());
   
   generatePoseTransfer(req, res);

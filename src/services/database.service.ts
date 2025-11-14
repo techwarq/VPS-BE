@@ -7,6 +7,7 @@ import {
   PhotoshootGeneration, 
   FinalPhotoGeneration, 
   PhotoshootSession,
+  User,
   COLLECTIONS 
 } from '../types/schemas';
 
@@ -218,9 +219,89 @@ export class DatabaseService {
       totalImages,
       totalSessions: sessionStats
     };
+  }
 
+  // ============================================
+  // User Authentication Methods
+  // ============================================
 
+  async createUser(data: Omit<User, '_id' | 'createdAt' | 'updatedAt'>): Promise<ObjectId> {
+    const now = new Date();
+    const document: User = {
+      ...data,
+      createdAt: now,
+      updatedAt: now,
+    };
+    
+    const result = await this.getDb().collection<User>(COLLECTIONS.USERS).insertOne(document);
+    return result.insertedId;
+  }
 
+  async getUserById(id: ObjectId): Promise<User | null> {
+    return await this.getDb().collection<User>(COLLECTIONS.USERS).findOne({ _id: id });
+  }
+
+  async getUserByEmail(email: string): Promise<User | null> {
+    return await this.getDb().collection<User>(COLLECTIONS.USERS).findOne({ email: email.toLowerCase() });
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    return await this.getDb().collection<User>(COLLECTIONS.USERS).findOne({ googleId });
+  }
+
+  async updateUser(id: ObjectId, updates: Partial<User>): Promise<void> {
+    await this.getDb().collection<User>(COLLECTIONS.USERS).updateOne(
+      { _id: id },
+      { $set: { ...updates, updatedAt: new Date() } }
+    );
+  }
+
+  async updateUserLastLogin(id: ObjectId): Promise<void> {
+    await this.getDb().collection<User>(COLLECTIONS.USERS).updateOne(
+      { _id: id },
+      { 
+        $set: { 
+          lastLogin: new Date(),
+          updatedAt: new Date()
+        } 
+      }
+    );
+  }
+
+  async linkGoogleAccount(userId: ObjectId, googleId: string, profilePicture?: string): Promise<void> {
+    const user = await this.getUserById(userId);
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const updates: Partial<User> = {
+      googleId,
+      authProvider: user.authProvider === 'local' ? 'both' : 'google',
+      updatedAt: new Date()
+    };
+
+    if (profilePicture) {
+      updates.profilePicture = profilePicture;
+    }
+
+    await this.getDb().collection<User>(COLLECTIONS.USERS).updateOne(
+      { _id: userId },
+      { $set: updates }
+    );
+  }
+
+  async deleteUser(id: ObjectId): Promise<void> {
+    await this.getDb().collection<User>(COLLECTIONS.USERS).deleteOne({ _id: id });
+  }
+
+  async getAllUsers(limit: number = 100, skip: number = 0): Promise<User[]> {
+    return await this.getDb().collection<User>(COLLECTIONS.USERS)
+      .find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .toArray();
   }
 }
+
 

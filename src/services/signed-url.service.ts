@@ -3,7 +3,33 @@ import { Request, Response } from 'express';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; 
-const BASE_URL = process.env.BASE_URL || 'https://vps-be.vercel.app';
+
+// Determine BASE_URL: use env var if set, otherwise detect environment
+function getBaseUrl(): string {
+  if (process.env.BASE_URL) {
+    return process.env.BASE_URL;
+  }
+  
+  // For local development, use localhost
+  const isDevelopment = process.env.NODE_ENV === 'development' || 
+                        process.env.NODE_ENV === undefined ||
+                        !process.env.VERCEL;
+  
+  if (isDevelopment) {
+    const port = process.env.PORT || '4000';
+    return `http://localhost:${port}`;
+  }
+  
+  // Default to production URL
+  return 'https://vps-be.vercel.app';
+}
+
+const BASE_URL = getBaseUrl();
+
+// Log BASE_URL on module load for debugging (only in development)
+if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined) {
+  console.log(`🔗 Signed URL BASE_URL: ${BASE_URL}`);
+}
 
 export interface SignedUrlPayload {
   fileId: string;

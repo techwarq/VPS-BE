@@ -125,3 +125,4 @@ To add new functionality:
 5. **New types**: Add to `/types/`
 
 This structure provides a clean, maintainable, and scalable foundation for the VPS-BE project.
+
