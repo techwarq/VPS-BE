@@ -70,6 +70,7 @@ const allowedOrigins = [
   'http://localhost:3000', // Common React Development Port
   'http://localhost:3001', // Another common Development Port
   'http://localhost:4000', // Allow self-requests if needed
+  'https://vps-fe-9i5c.vercel.app', // NEW: Added your deployed Vercel frontend URL
   // **IMPORTANT:** Add your production frontend URL here when deploying (e.g., 'https://https://your-app-domain.com')
 ];
 
