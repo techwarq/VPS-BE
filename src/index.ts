@@ -127,6 +127,27 @@ app.use((req: Request, res: Response, next: NextFunction): void => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Ensure database is connected before processing requests (important for serverless)
+app.use(async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    // Skip database check for health check and OPTIONS requests
+    if (req.path === '/health' || req.method === 'OPTIONS') {
+      next();
+      return;
+    }
+    
+    // Ensure database connection is established
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    console.error('Database connection error:', error);
+    res.status(503).json({
+      error: 'Service unavailable',
+      message: 'Database connection failed. Please try again later.'
+    });
+  }
+});
+
 app.get('/', (req: Request, res: Response): void => {
   res.json({
     message: 'Welcome to Node.js TypeScript Express API!',
