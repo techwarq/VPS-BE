@@ -4,38 +4,14 @@ import { Request, Response } from 'express';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; 
 
-// Determine BASE_URL: use env var if set, otherwise detect environment
+// Determine BASE_URL: use env var if set, otherwise use explicit production URL
 function getBaseUrl(req?: Request): string {
-  // Priority 1: Explicit BASE_URL environment variable
+  // Priority 1: Explicit BASE_URL environment variable (if set, use it)
   if (process.env.BASE_URL) {
     return process.env.BASE_URL;
   }
   
-  // Priority 2: Vercel URL (Vercel sets VERCEL_URL)
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`;
-  }
-  
-  // Priority 3: Use request headers to determine URL (for dynamic detection)
-  if (req) {
-    const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    if (host) {
-      // Always use HTTPS in production (non-localhost)
-      if (host.includes('localhost') || host.includes('127.0.0.1')) {
-        return `${protocol}://${host}`;
-      }
-      return `https://${host}`;
-    }
-  }
-  
-  // Priority 4: Check if we're on Vercel
-  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
-  if (isVercel) {
-    return 'https://vps-be.vercel.app';
-  }
-  
-  // Priority 5: For local development, use localhost
+  // Priority 2: For local development, use localhost
   const isDevelopment = process.env.NODE_ENV === 'development' || 
                         process.env.NODE_ENV === undefined;
   
@@ -44,7 +20,7 @@ function getBaseUrl(req?: Request): string {
     return `http://localhost:${port}`;
   }
   
-  // Default to production URL
+  // Default: Always use the explicit production URL (no automatic detection)
   return 'https://vps-be.vercel.app';
 }
 
