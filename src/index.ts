@@ -74,6 +74,25 @@ const allowedOrigins = [
   // **IMPORTANT:** Add your production frontend URL here when deploying (e.g., 'https://https://your-app-domain.com')
 ];
 
+// Handle preflight OPTIONS requests explicitly to prevent redirects
+// This must be before CORS middleware to catch OPTIONS requests first
+app.options('*', (req: Request, res: Response): void => {
+  const origin = req.headers.origin;
+  
+  // Always respond to OPTIONS with 200 (browser requirement)
+  // CORS headers will be set by the CORS middleware if origin is allowed
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  }
+  
+  // Send 200 immediately to prevent any redirects
+  res.status(200).end();
+});
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, postman, or curl requests)
@@ -92,12 +111,18 @@ app.use(cors({
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  preflightContinue: false, // Ensure preflight requests are handled immediately
 }));
 
-// The manual app.options('*') and app.use() blocks are removed 
-// as they conflict with the 'wildcard and credentials' rule.
-
 // --- FIXED CORS CONFIGURATION END ---
+
+// Normalize URLs (remove double slashes) to prevent redirect issues
+app.use((req: Request, res: Response, next: NextFunction): void => {
+  if (req.url.includes('//')) {
+    req.url = req.url.replace(/\/+/g, '/');
+  }
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
