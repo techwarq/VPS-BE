@@ -55,7 +55,8 @@ export const uploadFileHandler = async (req: Request, res: Response): Promise<vo
 
     const signedUrl = generateSignedUrl(uploadResult.fileId, {
       userId,
-      metadata: uploadResult
+      metadata: uploadResult,
+      req
     });
 
     res.status(201).json({
@@ -101,20 +102,23 @@ export const generateSignedUrlHandler = async (req: Request, res: Response): Pro
       signedUrl = generateUserSignedUrl(fileId, userId, {
         permissions: permissions ? permissions.split(',') : ['read'],
         expiry,
-        metadata
+        metadata,
+        req
       });
     } else if (permissions) {
       signedUrl = generateSignedUrlWithPermissions(fileId, permissions.split(','), {
         userId,
         expiry,
-        metadata
+        metadata,
+        req
       });
     } else {
       signedUrl = generateSignedUrl(fileId, {
         userId,
         permissions: ['read'],
         expiry,
-        metadata
+        metadata,
+        req
       });
     }
 

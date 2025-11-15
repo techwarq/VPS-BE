@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import { Request } from 'express';
 import { uploadFile } from './gridfs.service';
 import { generateSignedUrl } from './signed-url.service';
 
@@ -18,6 +19,7 @@ export async function storeBase64Image(
     userId?: string;
     metadata?: any;
     expiry?: string;
+    req?: Request;
   }
 ): Promise<ImageStorageResult> {
   try {
@@ -54,7 +56,8 @@ export async function storeBase64Image(
       metadata: {
         ...uploadResult,
         generated: true
-      }
+      },
+      req: options?.req
     });
     
     console.log('🔗 Generated signed URL:', signedUrl);
@@ -80,6 +83,7 @@ export async function storeMultipleBase64Images(
     userId?: string;
     metadata?: any;
     expiry?: string;
+    req?: Request;
   }
 ): Promise<ImageStorageResult[]> {
   const results: ImageStorageResult[] = [];
@@ -95,7 +99,8 @@ export async function storeMultipleBase64Images(
         filename,
         userId: options?.userId,
         metadata: options?.metadata,
-        expiry: options?.expiry
+        expiry: options?.expiry,
+        req: options?.req
       });
       
       results.push(result);
@@ -126,6 +131,7 @@ export function convertGeminiImagesToStorage(
     userId?: string;
     metadata?: any;
     expiry?: string;
+    req?: Request;
   }
 ): Promise<ImageStorageResult[]> {
   return storeMultipleBase64Images(geminiImages, options);

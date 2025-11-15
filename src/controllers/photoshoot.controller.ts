@@ -482,7 +482,8 @@ export const generateModels = async (req: Request, res: Response): Promise<void>
                 aspect_ratio: body.aspect_ratio,
                 generatedAt: new Date().toISOString()
               },
-              expiry: '24h'
+              expiry: '24h',
+              req
             });
             
             result.images = storedImages;
@@ -580,7 +581,8 @@ export const generatePose = async (req: Request, res: Response): Promise<void> =
                 aspect_ratio: body.aspect_ratio,
                 generatedAt: new Date().toISOString()
               },
-              expiry: '24h'
+              expiry: '24h',
+              req
             });
             
             result.images = storedImages;
@@ -677,7 +679,8 @@ export const generateBackground = async (req: Request, res: Response): Promise<v
                 aspect_ratio: body.aspect_ratio,
                 generatedAt: new Date().toISOString()
               },
-              expiry: '24h'
+              expiry: '24h',
+              req
             });
             
             result.images = storedImages;
@@ -896,7 +899,8 @@ async function generateModelAngles(
     negative_prompt?: string;
   },
   userId?: string,
-  storeInGridFS: boolean = true
+  storeInGridFS: boolean = true,
+  req?: Request
 ): Promise<AvatarAngleResult[]> {
   const subject = buildSubjectFromCharacteristics(modelChar);
   const styleText = `Style: ${commonSettings.style}. The shot framing is ${commonSettings.framing}.`;
@@ -997,7 +1001,8 @@ async function generateModelAngles(
           characteristics: modelChar,
           generatedAt: new Date().toISOString()
         },
-        expiry: '24h'
+        expiry: '24h',
+        req
       });
       firstAngleResult.images = storedImages;
       firstAngleResult.storedInGridFS = true;
@@ -1050,7 +1055,8 @@ async function generateModelAngles(
               characteristics: modelChar,
               generatedAt: new Date().toISOString()
             },
-            expiry: '24h'
+            expiry: '24h',
+            req
           });
           angleResult.images = storedImages;
           angleResult.storedInGridFS = true;
@@ -1165,7 +1171,8 @@ export const generateAvatar = async (req: Request, res: Response): Promise<void>
           modelIndex,
           commonSettings,
           userId,
-          shouldStoreInGridFS
+          shouldStoreInGridFS,
+          req
         );
 
         const modelResult: AvatarModelResult = {
@@ -1367,7 +1374,8 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
                       garment_images_count: garmentInputs.length,
                       generatedAt: new Date().toISOString()
                     },
-                    expiry: '24h'
+                    expiry: '24h',
+                    req
                   });
                   result.images = storedImages;
                   result.storedInGridFS = true;
@@ -1567,7 +1575,8 @@ export const generatePoseTransfer = async (req: Request, res: Response): Promise
                 aspect_ratio: body.aspect_ratio,
                 generatedAt: new Date().toISOString()
               },
-              expiry: '24h'
+              expiry: '24h',
+              req
             });
             
             result.images = storedImages;
@@ -1775,7 +1784,8 @@ export const addAccessories = async (req: Request, res: Response): Promise<void>
                   aspect_ratio: body.aspect_ratio,
                   generatedAt: new Date().toISOString()
                 },
-                expiry: '24h'
+                expiry: '24h',
+                req
               });
               
               result.images = storedImages;

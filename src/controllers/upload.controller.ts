@@ -69,7 +69,8 @@ export const simpleUploadHandler = async (req: Request, res: Response): Promise<
     const signedUrl = generateSignedUrl(uploadResult.fileId, {
       userId,
       metadata: uploadResult,
-      expiry: expiry
+      expiry: expiry,
+      req
     });
 
     console.log('🔗 Signed URL generated:', signedUrl);

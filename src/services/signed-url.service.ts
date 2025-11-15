@@ -5,15 +5,39 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-t
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '5m'; 
 
 // Determine BASE_URL: use env var if set, otherwise detect environment
-function getBaseUrl(): string {
+function getBaseUrl(req?: Request): string {
+  // Priority 1: Explicit BASE_URL environment variable
   if (process.env.BASE_URL) {
     return process.env.BASE_URL;
   }
   
-  // For local development, use localhost
+  // Priority 2: Vercel URL (Vercel sets VERCEL_URL)
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  
+  // Priority 3: Use request headers to determine URL (for dynamic detection)
+  if (req) {
+    const protocol = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    if (host) {
+      // Always use HTTPS in production (non-localhost)
+      if (host.includes('localhost') || host.includes('127.0.0.1')) {
+        return `${protocol}://${host}`;
+      }
+      return `https://${host}`;
+    }
+  }
+  
+  // Priority 4: Check if we're on Vercel
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+  if (isVercel) {
+    return 'https://vps-be.vercel.app';
+  }
+  
+  // Priority 5: For local development, use localhost
   const isDevelopment = process.env.NODE_ENV === 'development' || 
-                        process.env.NODE_ENV === undefined ||
-                        !process.env.VERCEL;
+                        process.env.NODE_ENV === undefined;
   
   if (isDevelopment) {
     const port = process.env.PORT || '4000';
@@ -24,12 +48,8 @@ function getBaseUrl(): string {
   return 'https://vps-be.vercel.app';
 }
 
-const BASE_URL = getBaseUrl();
-
-// Log BASE_URL on module load for debugging (only in development)
-if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === undefined) {
-  console.log(`🔗 Signed URL BASE_URL: ${BASE_URL}`);
-}
+// Fallback BASE_URL for when no request is available (shouldn't happen in production)
+const FALLBACK_BASE_URL = getBaseUrl();
 
 export interface SignedUrlPayload {
   fileId: string;
@@ -51,6 +71,7 @@ export function generateSignedUrl(
     permissions?: string[];
     metadata?: any;
     expiry?: string;
+    req?: Request; // Optional request object for dynamic URL detection
   }
 ): string {
   const payload: SignedUrlPayload = {
@@ -64,7 +85,10 @@ export function generateSignedUrl(
     expiresIn: options?.expiry || JWT_EXPIRY
   } as jwt.SignOptions);
 
-  return `${BASE_URL}/api/files/${fileId}?token=${token}`;
+  // Use request-aware base URL if available, otherwise use fallback
+  const baseUrl = options?.req ? getBaseUrl(options.req) : FALLBACK_BASE_URL;
+  
+  return `${baseUrl}/api/files/${fileId}?token=${token}`;
 }
 
 export function validateToken(token: string): TokenValidationResult {
@@ -147,6 +171,7 @@ export function generateSignedUrlWithPermissions(
     userId?: string;
     metadata?: any;
     expiry?: string;
+    req?: Request;
   }
 ): string {
   return generateSignedUrl(fileId, {
@@ -162,6 +187,7 @@ export function generateUserSignedUrl(
     permissions?: string[];
     metadata?: any;
     expiry?: string;
+    req?: Request;
   }
 ): string {
   return generateSignedUrl(fileId, {
