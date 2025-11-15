@@ -10,6 +10,7 @@ import {
   runwayOrganizationInfo 
 } from './connectors/runway.connector';
 import { geminiGenerate, geminiGenerateStream } from './connectors/gemini.connector';
+import { geminiTest } from './controllers/gemini-test.controller';
 import { fluxCreate, fluxPoll } from './connectors/flux.connector';
 import { 
   generateModels, 
@@ -138,6 +139,7 @@ app.post('/api/gemini/compare', geminiRoute);
 
 app.post('/api/gemini/generate', geminiGenerate);
 app.post('/api/gemini/generate-stream', geminiGenerateStream);
+app.post('/api/gemini/test', geminiTest);
 
 // Authentication routes
 app.post('/api/auth/register', registerWithPassword);

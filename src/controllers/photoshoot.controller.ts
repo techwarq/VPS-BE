@@ -119,8 +119,8 @@ interface AvatarResponse {
 }
 
 interface TryOnItem {
-  avatar_image: string | { mimeType: string; data: string }; 
-  garment_images: Array<string | { mimeType: string; data: string }>; 
+  avatar_images: Array<string | { mimeType: string; data: string }>; // All angles for one avatar
+  garment_images: Array<string | { mimeType: string; data: string }>; // Garments assigned to this avatar
   reference_model_images?: Array<string | { mimeType: string; data: string }>; 
 }
 
@@ -299,19 +299,52 @@ export const chatQuery = async (req: Request, res: Response): Promise<void> => {
     const gemini = new GeminiConnector(geminiApiKey);
     console.log(`⏱️  Initialization took: ${Date.now() - initTime}ms`);
 
-    // Optimized shorter prompt for faster response
-    const prompt = `You are VirtuShoot AI assistant. Understand user intent and return JSON only.
+    // Enhanced prompt for better intent understanding
+    const prompt = `You are VirtuShoot AI assistant - a helpful, intelligent assistant for a virtual photoshoot platform. Your job is to understand user intent and respond appropriately.
 
-Rules:
-- Return JSON: {"type":"message"|"question","content":"text","next":"uiNode","data":{...}}
-- Keep replies short and friendly
-- Never render UI components
-- Progress workflow logically
+**CRITICAL RULES:**
+1. **Understand Intent First**: Analyze what the user is asking for
+2. **Answer Questions Naturally**: If user asks a question, answer it directly and helpfully
+3. **Only Open Modals When User Requests Actions**: Don't force modals on every response
+4. **Be Conversational**: Respond naturally, not robotically
 
-Example: User: "I want photoshoot" → {"type":"message","content":"Let's set up your avatar.","next":"selectAvatarModal"}
+**Response Format (JSON only):**
+{
+  "type": "message" | "question",
+  "content": "Your natural, helpful response text",
+  "next": "uiNode" | null,
+  "data": {}
+}
 
-User query: ${body.userQuery}`;
-    
+**When to Set "next" to a Modal:**
+- User says "photoshoot", "create avatar", "generate avatar", "make avatar" → next: "selectAvatarModal"
+- User says "try on", "tryon", "virtual try on", "fit clothes" → next: "selectedTryonmode"
+- User asks general questions, needs help, or just chatting → next: null (just answer)
+
+**Examples:**
+
+User: "What is VirtuShoot?"
+Response: {"type":"message","content":"VirtuShoot is a virtual photoshoot platform where you can create AI-generated avatars and try on clothes virtually. You can generate realistic model photos and see how garments look on them!","next":null,"data":{}}
+
+User: "I want to create a photoshoot"
+Response: {"type":"message","content":"Great! Let's create your avatar. I'll help you set up your photoshoot.","next":"selectAvatarModal","data":{}}
+
+User: "How do I try on clothes?"
+Response: {"type":"message","content":"To try on clothes, you'll need to first create or select an avatar, then choose the garments you want to see. Would you like to start?","next":"selectedTryonmode","data":{}}
+
+User: "I want to try on some clothes"
+Response: {"type":"message","content":"Perfect! Let's set up a virtual try-on session.","next":"selectedTryonmode","data":{}}
+
+User: "What features do you have?"
+Response: {"type":"message","content":"VirtuShoot offers several features: 1) Avatar generation - create realistic AI models, 2) Virtual try-on - see how clothes look on avatars, 3) Pose transfer - change poses while keeping the same person, and 4) Background generation - create custom photoshoot backgrounds. What would you like to try?","next":null,"data":{}}
+
+**User query:** ${body.userQuery}
+
+**IMPORTANT:** 
+- If the user is asking a question, answer it naturally with next: null
+- Only set "next" when user explicitly wants to start a photoshoot or try-on
+- Be helpful, friendly, and conversational`;
+
     const geminiStartTime = Date.now();
     console.log('🤖 Sending query to Gemini:', body.userQuery);
     
@@ -331,12 +364,51 @@ User query: ${body.userQuery}`;
     console.log('📄 Response text length:', parsed.text?.length || 0);
     console.log('🖼️  Response images count:', parsed.images?.length || 0);
     
+    // Parse JSON from response text
+    let responseData: any = {
+      type: 'message',
+      content: parsed.text || 'I apologize, I couldn\'t process that request.',
+      next: null,
+      data: {}
+    };
+
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = parsed.text?.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const jsonText = jsonMatch[0]
+          .replace(/^```(json)?/i, '')
+          .replace(/```$/i, '')
+          .trim();
+        const parsedJson = JSON.parse(jsonText);
+        responseData = {
+          type: parsedJson.type || 'message',
+          content: parsedJson.content || parsed.text,
+          next: parsedJson.next || null,
+          data: parsedJson.data || {}
+        };
+      }
+    } catch (parseError) {
+      console.warn('⚠️  Could not parse JSON from response, using text as content');
+      // Use the text as content, no modal trigger
+      responseData = {
+        type: 'message',
+        content: parsed.text || 'I apologize, I couldn\'t process that request.',
+        next: null,
+        data: {}
+      };
+    }
+    
     const totalTime = Date.now() - startTime;
     console.log(`⏱️  Total request time: ${totalTime}ms`);
+    console.log(`📤 Response:`, JSON.stringify(responseData, null, 2));
     
     res.json({
       success: true,
-      text: parsed.text,
+      type: responseData.type,
+      content: responseData.content,
+      next: responseData.next,
+      data: responseData.data,
       images: parsed.images || [],
       userId: userId,
       query_id: body.query_id,
@@ -1154,6 +1226,9 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    console.log(`🎯 Try-on request received: ${body.items.length} item(s) to process`);
+    console.log(`👤 User: ${userId || 'anonymous'}`);
+
     res.setHeader('Content-Type', 'application/x-ndjson');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -1164,102 +1239,165 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
     const styleLine = body.style ? `The overall style should be: ${body.style}.` : "The style should be photorealistic.";
     const negLine = body.negative_prompt ? `Avoid the following: ${body.negative_prompt}.` : "";
 
+    // Process items ONE BY ONE sequentially
     for (let idx = 0; idx < body.items.length; idx++) {
       const item = body.items[idx];
-      const avatarInput = item.avatar_image;
+      const avatarInputs = Array.isArray(item.avatar_images) ? item.avatar_images : [];
       const garmentInputs = Array.isArray(item.garment_images) ? item.garment_images : [];
 
-      if (!avatarInput || garmentInputs.length === 0) {
+      console.log(`\n📦 Processing item ${idx + 1}/${body.items.length}`);
+      console.log(`   Avatar images: ${avatarInputs.length} angle(s)`);
+      console.log(`   Garment images: ${garmentInputs.length} item(s)`);
+
+      if (avatarInputs.length === 0 || garmentInputs.length === 0) {
         const err = {
           item_index: idx,
-          error: !avatarInput ? 'Missing avatar_image' : 'No garment_images provided'
+          error: avatarInputs.length === 0 ? 'Missing avatar_images' : 'No garment_images provided'
         };
+        console.error(`❌ Item ${idx + 1} validation failed:`, err.error);
         res.write(JSON.stringify(err) + '\n');
         continue;
       }
 
       try {
-        const avatar = await convertImageInputToBase64(avatarInput);
-        
-        const garments = await Promise.all(
-          garmentInputs.map(gInput => convertImageInputToBase64(gInput))
-        );
+        // Fetch all avatar images (all angles) sequentially
+        console.log(`   🔄 Fetching ${avatarInputs.length} avatar image(s)...`);
+        const avatars: Array<{ mimeType: string; data: string }> = [];
+        for (let i = 0; i < avatarInputs.length; i++) {
+          try {
+            const avatar = await convertImageInputToBase64(avatarInputs[i]);
+            avatars.push(avatar);
+            console.log(`   ✅ Avatar image ${i + 1}/${avatarInputs.length} fetched`);
+          } catch (error) {
+            console.error(`   ❌ Failed to fetch avatar image ${i + 1}:`, error);
+            throw new Error(`Failed to fetch avatar image ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        // Fetch all garment images sequentially
+        console.log(`   🔄 Fetching ${garmentInputs.length} garment image(s)...`);
+        const garments: Array<{ mimeType: string; data: string }> = [];
+        for (let i = 0; i < garmentInputs.length; i++) {
+          try {
+            const garment = await convertImageInputToBase64(garmentInputs[i]);
+            garments.push(garment);
+            console.log(`   ✅ Garment image ${i + 1}/${garmentInputs.length} fetched`);
+          } catch (error) {
+            console.error(`   ❌ Failed to fetch garment image ${i + 1}:`, error);
+            throw new Error(`Failed to fetch garment image ${i + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
 
         const garmentCount = garments.length;
         const prompt = [
           "You are an expert virtual stylist creating a professional e-commerce fashion photo from multiple inputs.",
           `**Task:** Create a single, photorealistic, full-body image of the model from the first image wearing a complete outfit composed of the ${garmentCount} garments from the subsequent images.`,
           "**Inputs:**",
-          "- The VERY FIRST image is the model.",
+          "- The VERY FIRST image is the model (use this as the primary reference for identity and pose).",
           `- The NEXT ${garmentCount} images are the individual clothing items (e.g., a shirt, pants, etc.).`,
           "**Instructions:**",
           "1. **Combine the Garments:** Accurately dress the model in ALL the provided clothing items to form a coherent outfit. The clothes must fit and layer naturally (e.g., shirt tucked into pants).",
           "2. **Identity Preservation is CRITICAL:** The model's face, hair, skin tone, and body shape must remain IDENTICAL to the first input image. It must be the exact same person.",
-          "3. **Background:** The background must be a seamless, neutral light gray studio backdrop.",
-          "4. **Realism:** Ensure natural fit, drape, and texture for all clothes, with realistic lighting and shadows.",
+          "3. **Pose Preservation:** Maintain the exact same pose and angle as shown in the first model image.",
+          "4. **Background:** The background must be a seamless, neutral light gray studio backdrop.",
+          "5. **Realism:** Ensure natural fit, drape, and texture for all clothes, with realistic lighting and shadows.",
           styleLine,
           negLine
         ].filter(Boolean).join(" ");
 
-        const input_parts = [
-          { inlineData: avatar },
-          ...garments.map(g => ({ inlineData: g })), 
-          { text: prompt }
-        ];
+        // Generate try-on for EACH avatar angle
+        console.log(`   🎨 Generating try-on for ${avatars.length} angle(s)...`);
         
-        if (item.reference_model_images) {
-           for (const refImgInput of item.reference_model_images) {
-            try {
-              const refImg = await convertImageInputToBase64(refImgInput);
-              input_parts.push({ inlineData: refImg });
-            } catch (error) {
-              console.warn(`Failed to process reference model image.`);
+        for (let angleIdx = 0; angleIdx < avatars.length; angleIdx++) {
+          try {
+            console.log(`   📐 Processing angle ${angleIdx + 1}/${avatars.length}...`);
+            
+            const input_parts = [
+              { inlineData: avatars[angleIdx] }, // Current avatar angle
+              ...garments.map(g => ({ inlineData: g })), 
+              { text: prompt }
+            ];
+            
+            // Add reference model images if provided
+            if (item.reference_model_images) {
+              for (const refImgInput of item.reference_model_images) {
+                try {
+                  const refImg = await convertImageInputToBase64(refImgInput);
+                  input_parts.push({ inlineData: refImg });
+                } catch (error) {
+                  console.warn(`   ⚠️  Failed to process reference model image:`, error);
+                }
+              }
             }
+            
+            console.log(`   🤖 Sending angle ${angleIdx + 1} to Gemini API...`);
+            const response = await gemini.generateContent({
+              model: 'gemini-2.5-flash-image',
+              contents: [{ role: 'user', parts: input_parts }],
+              responseModalities: ['IMAGE', 'TEXT'],
+            });
+
+            const parsed = parseGeminiParts(response.candidates?.[0]);
+            if (parsed.images?.length) {
+              console.log(`   ✅ Angle ${angleIdx + 1} generation successful: ${parsed.images.length} image(s) returned`);
+              
+              let result: any = {
+                item_index: idx,
+                angle_index: angleIdx,
+                total_angles: avatars.length,
+                images: parsed.images,
+                text: parsed.text,
+                prompt: prompt,
+                garment_images_count: garmentInputs.length,
+              };
+
+              if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
+                try {
+                  console.log(`   💾 Storing angle ${angleIdx + 1} images in GridFS...`);
+                  const storedImages = await convertGeminiImagesToStorage(parsed.images, {
+                    filenamePrefix: `tryon-item-${idx}-angle-${angleIdx}`,
+                    userId: userId,
+                    metadata: {
+                      type: 'tryon-generation',
+                      itemIndex: idx,
+                      angleIndex: angleIdx,
+                      totalAngles: avatars.length,
+                      aspect_ratio: body.aspect_ratio,
+                      style: body.style,
+                      garment_images_count: garmentInputs.length,
+                      generatedAt: new Date().toISOString()
+                    },
+                    expiry: '24h'
+                  });
+                  result.images = storedImages;
+                  result.storedInGridFS = true;
+                  console.log(`   ✅ Angle ${angleIdx + 1} images stored in GridFS`);
+                } catch (error) {
+                  console.error(`   ❌ Error storing angle ${angleIdx + 1} images in GridFS:`, error);
+                }
+              }
+              
+              // Stream result immediately for this angle
+              res.write(JSON.stringify(result) + '\n');
+              console.log(`   ✅ Angle ${angleIdx + 1} completed and streamed`);
+            } else {
+              throw new Error(`Generation returned no images for angle ${angleIdx + 1}.`);
+            }
+          } catch (angleErr: any) {
+            console.error(`   ❌ Angle ${angleIdx + 1} failed:`, angleErr?.message || 'Unknown error');
+            const errorResult = {
+              item_index: idx,
+              angle_index: angleIdx,
+              error: angleErr?.message || 'Unknown error during angle generation'
+            };
+            res.write(JSON.stringify(errorResult) + '\n');
           }
         }
         
-         const response = await gemini.generateContent({
-           model: 'gemini-2.5-flash-image',
-           contents: [{ role: 'user', parts: input_parts }],
-           responseModalities: ['IMAGE', 'TEXT'],
-         });
-
-        const parsed = parseGeminiParts(response.candidates?.[0]);
-        if (parsed.images?.length) {
-          let result: any = {
-            item_index: idx,
-            images: parsed.images,
-            text: parsed.text,
-            prompt: prompt,
-          };
-
-          if (body.storeInGridFS && parsed.images && parsed.images.length > 0) {
-            try {
-              const storedImages = await convertGeminiImagesToStorage(parsed.images, {
-                filenamePrefix: `tryon-item-${idx}`,
-                userId: userId,
-                metadata: {
-                  type: 'tryon-generation',
-                  itemIndex: idx,
-                  aspect_ratio: body.aspect_ratio,
-                  style: body.style,
-                  generatedAt: new Date().toISOString()
-                },
-                expiry: '24h'
-              });
-              result.images = storedImages;
-              result.storedInGridFS = true;
-            } catch (error) {
-              console.error('Error storing try-on images in GridFS:', error);
-            }
-          }
-          
-          res.write(JSON.stringify(result) + '\n');
-        } else {
-          throw new Error("Generation returned no images for the outfit.");
-        }
+        console.log(`   ✅ Item ${idx + 1} completed (${avatars.length} angle(s) processed)\n`);
 
       } catch (genErr: any) {
+        console.error(`   ❌ Item ${idx + 1} failed:`, genErr?.message || 'Unknown error');
         const errorResult = { 
           item_index: idx,
           error: genErr?.message || 'Unknown error during outfit generation' 
@@ -1269,10 +1407,11 @@ export const tryOn = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
+    console.log(`\n✅ All items processed. Closing stream.`);
     res.end();
 
   } catch (error) {
-    console.error('tryOn error:', error);
+    console.error('❌ Try-on error:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: 'Try-on failed', message: (error as Error).message });
     } else {
