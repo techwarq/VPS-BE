@@ -64,32 +64,39 @@ import { simpleUploadHandler, upload as simpleUpload } from './controllers/uploa
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// --- FIXED CORS CONFIGURATION START ---
+
+const allowedOrigins = [
+  'http://localhost:3000', // Common React Development Port
+  'http://localhost:3001', // Another common Development Port
+  'http://localhost:4000', // Allow self-requests if needed
+  // **IMPORTANT:** Add your production frontend URL here when deploying (e.g., 'https://https://your-app-domain.com')
+];
+
 app.use(cors({
-  origin: true,
-  credentials: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, postman, or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if the request's origin is in the allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Block the request if the origin is not allowed
+    const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
+    return callback(new Error(msg), false);
+  },
+  credentials: true, // MUST be true for setting cookies/sending tokens
   optionsSuccessStatus: 200,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
-  preflightContinue: false,
-  maxAge: 86400
 }));
 
-app.options('*', (req: Request, res: Response): void => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.sendStatus(200);
-});
+// The manual app.options('*') and app.use() blocks are removed 
+// as they conflict with the 'wildcard and credentials' rule.
 
-app.use((req: Request, res: Response, next: NextFunction): void => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  next();
-});
+// --- FIXED CORS CONFIGURATION END ---
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -206,7 +213,6 @@ app.get('/api/files/health', fileServiceHealthHandler);
 
 app.get('/api/debug/files', async (req: Request, res: Response): Promise<void> => {
   try {
-    const files = await listFilesHandler;
     const { listFiles } = require('./services/gridfs.service');
     const allFiles = await listFiles();
     res.json({
@@ -297,7 +303,7 @@ async function startServer() {
       console.log(`🌐 URL: http://localhost:${PORT}`);
       console.log(`🔍 Health check: http://localhost:${PORT}/health`);
       console.log(`🗄️  MongoDB connected successfully`);
-      console.log(`🌍 CORS enabled for localhost:3000 and localhost:3001`);
+      console.log(`✅ CORS is now configured for specific origins.`);
     });
 
     process.on('SIGINT', async () => {
