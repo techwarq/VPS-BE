@@ -11,17 +11,15 @@ function getBaseUrl(req?: Request): string {
     return process.env.BASE_URL;
   }
   
-  // Priority 2: For local development, use localhost
-  const isDevelopment = process.env.NODE_ENV === 'development' || 
-                        process.env.NODE_ENV === undefined;
-  
-  if (isDevelopment) {
-    const port = process.env.PORT || '4000';
-    return `http://localhost:${port}`;
+  // Priority 2: If on Vercel, always use production URL (no automatic detection)
+  const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_URL;
+  if (isVercel) {
+    return 'https://vps-be.vercel.app';
   }
   
-  // Default: Always use the explicit production URL (no automatic detection)
-  return 'https://vps-be.vercel.app';
+  // Priority 3: For local development (not on Vercel), use localhost
+  const port = process.env.PORT || '4000';
+  return `http://localhost:${port}`;
 }
 
 // Fallback BASE_URL for when no request is available (shouldn't happen in production)
