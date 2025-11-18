@@ -40,6 +40,7 @@ import {
   listFilesHandler,
   bulkDeleteFilesHandler,
   deleteFilesByFilterHandler,
+  deleteAllFilesHandler,
   upload
 } from './controllers/file.controller';
 import {
@@ -60,6 +61,7 @@ import {
 import { validateFileAccess } from './services/signed-url.service';
 import { optionalAuth, requireAuth } from './middleware/auth.middleware';
 import { simpleUploadHandler, upload as simpleUpload } from './controllers/upload.controller';
+import { researchCompanyUrl } from './controllers/company-research.controller';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -71,6 +73,7 @@ const allowedOrigins = [
   'http://localhost:3001', // Another common Development Port
   'http://localhost:4000', // Allow self-requests if needed
   'https://vps-fe-9i5c.vercel.app', // NEW: Added your deployed Vercel frontend URL
+  'https://www.alloreai.com', // NEW: Added Alloreai production URL
   // **IMPORTANT:** Add your production frontend URL here when deploying (e.g., 'https://https://your-app-domain.com')
 ];
 
@@ -220,6 +223,9 @@ app.post('/api/photoshoot/shoot', optionalAuth, generatePhotoshoot);
 app.post('/api/photoshoot/final', optionalAuth, generateFinalPhoto);
 app.post('/api/photoshoot/chat', requireAuth, chatQuery);
 
+// Company research routes
+app.post('/api/company/research', optionalAuth, researchCompanyUrl);
+
 app.post('/api/photoshoot/avatar', optionalAuth, (req: Request, res: Response): void => {
   console.log('🎯 Avatar generation endpoint hit');
   console.log('👤 User:', req.user?.userId || 'anonymous');
@@ -320,6 +326,7 @@ app.delete('/api/files/:fileId', optionalAuth, deleteFileHandler);
 
 app.post('/api/files/bulk-delete', optionalAuth, bulkDeleteFilesHandler);
 app.post('/api/files/delete-by-filter', optionalAuth, deleteFilesByFilterHandler);
+app.delete('/api/files', optionalAuth, deleteAllFilesHandler);
 
 app.get('/api/files/:id/download', validateFileAccess, downloadFileHandler);
 app.get('/api/files/:id/metadata', validateFileAccess, getFileMetadataHandler);

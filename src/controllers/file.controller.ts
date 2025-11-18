@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import multer from 'multer';
-import { uploadFile, getFileInfo, deleteFile, listFiles } from '../services/gridfs.service';
+import { uploadFile, getFileInfo, deleteFile, listFiles, deleteAllFiles } from '../services/gridfs.service';
 import { generateSignedUrl, generateSignedUrlWithPermissions, generateUserSignedUrl } from '../services/signed-url.service';
 import { connectToDatabase } from '../config/database';
 
@@ -387,6 +387,29 @@ export const deleteFilesByFilterHandler = async (req: Request, res: Response): P
     console.error('Delete files by filter error:', error);
     res.status(500).json({
       error: 'Failed to delete files by filter',
+      message: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
+  }
+};
+
+export const deleteAllFilesHandler = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await connectToDatabase();
+    
+    const result = await deleteAllFiles();
+    
+    res.json({
+      success: true,
+      message: `All files deleted: ${result.deleted} deleted, ${result.failed} failed`,
+      result: {
+        deleted: result.deleted,
+        failed: result.failed
+      }
+    });
+  } catch (error) {
+    console.error('Delete all files error:', error);
+    res.status(500).json({
+      error: 'Failed to delete all files',
       message: error instanceof Error ? error.message : 'Unknown error occurred'
     });
   }

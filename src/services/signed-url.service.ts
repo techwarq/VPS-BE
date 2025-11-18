@@ -18,10 +18,10 @@ function getBaseUrl(req?: Request): string {
   }
   
   // Priority 3: For local development (not on Vercel), use localhost
-  const port = process.env.PORT || '4000';
-  return `http://localhost:${port}`;
-}
-
+    const port = process.env.PORT || '4000';
+    return `http://localhost:${port}`;
+  }
+  
 // Fallback BASE_URL for when no request is available (shouldn't happen in production)
 const FALLBACK_BASE_URL = getBaseUrl();
 

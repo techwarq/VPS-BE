@@ -100,3 +100,28 @@ export async function listFiles(filter: any = {}): Promise<any[]> {
   const gridFSBucket = getGridFSBucket();
   return await gridFSBucket.find(filter).toArray();
 }
+
+export async function deleteAllFiles(): Promise<{ deleted: number; failed: number }> {
+  try {
+    const gridFSBucket = getGridFSBucket();
+    const files = await gridFSBucket.find({}).toArray();
+    
+    let deleted = 0;
+    let failed = 0;
+    
+    for (const file of files) {
+      try {
+        await gridFSBucket.delete(file._id);
+        deleted++;
+      } catch (error) {
+        console.error(`Error deleting file ${file._id}:`, error);
+        failed++;
+      }
+    }
+    
+    return { deleted, failed };
+  } catch (error) {
+    console.error('Error deleting all files:', error);
+    throw error;
+  }
+}

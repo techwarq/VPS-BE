@@ -10,7 +10,7 @@ export async function connectToDatabase(): Promise<Db> {
     // Check if client is still connected (faster than ping)
     const topology = (client as any).topology;
     if (topology && topology.isConnected && topology.isConnected()) {
-      return db;
+    return db;
     } else {
       // Connection is dead, reset and reconnect
       console.warn('⚠️ Database connection lost, reconnecting...');

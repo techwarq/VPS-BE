@@ -18,6 +18,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@browserbasehq/stagehand": "^3.0.3",
     "@google/genai": "^1.17.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.19",
@@ -33,7 +34,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.19.0",
     "multer": "^2.0.2",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
